@@ -54,6 +54,7 @@ class SliceBuilder:
             self._check_patch_shape(patch_shape)
 
         self._raw_slices = self._build_slices(raw_datasets[0], patch_shape, stride_shape)
+        
         if label_datasets is None:
             self._label_slices = None
         else:
@@ -229,7 +230,7 @@ class RandomFilterSliceBuilder(EmbeddingsSliceBuilder):
 
 
 def _get_cls(class_name):
-    modules = ['pytorch3dunet.datasets.hdf5', 'pytorch3dunet.datasets.dsb', 'pytorch3dunet.datasets.utils']
+    modules = ['pytorch3dunet.datasets.hdf5', 'pytorch3dunet.datasets.dsb', 'pytorch3dunet.datasets.dicom', 'pytorch3dunet.datasets.utils']
     for module in modules:
         m = importlib.import_module(module)
         clazz = getattr(m, class_name, None)
@@ -240,7 +241,7 @@ def _get_cls(class_name):
 
 def get_slice_builder(raws, labels, weight_maps, config):
     assert 'name' in config
-    logger.info(f"Slice builder config: {config}")
+    # logger.info(f"Slice builder config: {config}")
     slice_builder_cls = _get_cls(config['name'])
     return slice_builder_cls(raws, labels, weight_maps, **config)
 
@@ -267,13 +268,15 @@ def get_train_loaders(config):
         logger.warn(f"Cannot find dataset class in the config. Using default '{dataset_cls_str}'.")
     dataset_class = _get_cls(dataset_cls_str)
 
-    assert set(loaders_config['train']['file_paths']).isdisjoint(loaders_config['val']['file_paths']), \
-        "Train and validation 'file_paths' overlap. One cannot use validation data for training!"
+    # assert set(loaders_config['train']['file_paths']).isdisjoint(loaders_config['val']['file_paths']), \
+    #     "Train and validation 'file_paths' overlap. One cannot use validation data for training!"
+    if not set(loaders_config['train']['file_paths']).isdisjoint(loaders_config['val']['file_paths']):
+        logger.warn("Train and validation 'file_paths' overlap. Make sure they are disjoint!")
 
     train_datasets = dataset_class.create_datasets(loaders_config, phase='train')
 
     val_datasets = dataset_class.create_datasets(loaders_config, phase='val')
-
+    
     num_workers = loaders_config.get('num_workers', 1)
     logger.info(f'Number of workers for train/val dataloader: {num_workers}')
     batch_size = loaders_config.get('batch_size', 1)
@@ -290,6 +293,41 @@ def get_train_loaders(config):
         'val': DataLoader(ConcatDataset(val_datasets), batch_size=batch_size, shuffle=True, num_workers=num_workers)
     }
 
+def get_dejavu_loader(config):
+    """
+    Returns dictionary containing the training and validation loaders (torch.utils.data.DataLoader).
+
+    :param config: a top level configuration object containing the 'loaders' key
+    :return: dict {
+        'train': <train_loader>
+        'val': <val_loader>
+    }
+    """
+    assert 'loaders_dejavu' in config, 'Could not find data dejavu loaders configuration'
+    loaders_config = config['loaders_dejavu']
+
+    logger.info('Creating training and validation set loaders...')
+
+    # get dataset class
+    dataset_cls_str = loaders_config.get('dataset', None)
+    if dataset_cls_str is None:
+        dataset_cls_str = 'StandardHDF5Dataset'
+        logger.warn(f"Cannot find dataset class in the config. Using default '{dataset_cls_str}'.")
+    dataset_class = _get_cls(dataset_cls_str)
+
+    train_datasets = dataset_class.create_datasets(loaders_config, phase='train')
+    
+    num_workers = loaders_config.get('num_workers', 1)
+    logger.info(f'Number of workers for train dataloader: {num_workers}')
+    batch_size = loaders_config.get('batch_size', 1)
+    if torch.cuda.device_count() > 1 and not config['device'].type == 'cpu':
+        logger.info(
+            f'{torch.cuda.device_count()} GPUs available. Using batch_size = {torch.cuda.device_count()} * {batch_size}')
+
+    logger.info(f'Batch size for train loader: {batch_size}')
+    # when training with volumetric data use batch_size of 1 due to GPU memory constraints
+    return DataLoader(ConcatDataset(train_datasets), batch_size=batch_size, shuffle=True,
+                            num_workers=num_workers)
 
 def get_test_loaders(config):
     """
