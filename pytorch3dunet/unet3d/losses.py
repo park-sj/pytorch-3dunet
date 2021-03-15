@@ -7,6 +7,10 @@ from torch.nn import MSELoss, SmoothL1Loss, L1Loss
 from pytorch3dunet.embeddings.contrastive_loss import ContrastiveLoss
 from pytorch3dunet.unet3d.utils import expand_as_one_hot
 
+import numpy as np
+from pytorch3dunet.unet3d.utils import get_logger
+
+logger = get_logger('Losses')
 
 def compute_per_channel_dice(input, target, epsilon=1e-6, weight=None):
     """
@@ -173,8 +177,178 @@ class BCEDiceLoss(nn.Module):
         self.dice = DiceLoss()
 
     def forward(self, input, target):
-        return self.alpha * self.bce(input, target) + self.beta * self.dice(input, target)
+        return self.alpha * self.bce(input, target) + self.beta * self.nn.CrossEntropyLossdice(input, target)
 
+class ActiveContourLoss(nn.Module):
+    """Loss from 'Learning Active Contour Models for Medical Image Segmentation. This code is written by Junwon Son."""
+
+    def __init__(self, lambdaP, mu):
+        super(ActiveContourLoss, self).__init__()
+        self.lambdaP = lambdaP
+        self.mu = mu
+
+    def forward(self, input, target):
+        x = input[:,:,1:,:,:] - input[:,:,:-1,:,:]
+        y = input[:,:,:,1:,:] - input[:,:,:,:-1,:]
+        z = input[:,:,:,:,1:] - input[:,:,:,:,:-1]
+        
+        delta_x = x[:,:,1:,:-2,:-2]**2
+        delta_y = y[:,:,:-2,1:,:-2]**2
+        delta_z = z[:,:,:-2,:-2,1:]**2
+        delta_u = torch.abs(delta_x + delta_y + delta_z)
+        
+        length = torch.mean(torch.sqrt(delta_u + 0.00000001))
+        
+        # C_1 = torch.ones(input.size()).cuda()
+        # C_2 = torch.zeros(input.size()).cuda()
+        C_1 = torch.ones_like(input)
+        C_2 = torch.zeros_like(input)
+        
+        region_in = torch.mean(input * ((target - C_1)**2))
+        region_out = torch.mean((1-input) * ((target-C_2)**2))
+                
+        return length + self.lambdaP * (self.mu * region_in + region_out)
+    
+class ModifiedActiveContourLoss(nn.Module):
+    """Loss from 'Learning Active Contour Models for Medical Image Segmentation. This code is written by Junwon Son."""
+
+    def __init__(self, lambdaP, mu):
+        super(ModifiedActiveContourLoss, self).__init__()
+        self.lambdaP = lambdaP
+        self.mu = mu
+
+    def forward(self, input, target):
+        x = input[:,:,1:,:,:] - input[:,:,:-1,:,:]
+        y = input[:,:,:,1:,:] - input[:,:,:,:-1,:]
+        z = input[:,:,:,:,1:] - input[:,:,:,:,:-1]
+        
+        delta_x = x[:,:,1:,:-2,:-2]**2
+        delta_y = y[:,:,:-2,1:,:-2]**2
+        delta_z = z[:,:,:-2,:-2,1:]**2
+        delta_u = torch.abs(delta_z)
+        
+        length = torch.mean(torch.sqrt(delta_u + 0.00000001))
+        
+        # C_1 = torch.ones(input.size()).cuda()
+        # C_2 = torch.zeros(input.size()).cuda()
+        C_1 = torch.ones_like(input)
+        C_2 = torch.zeros_like(input)
+        
+        region_in = torch.mean(input * ((target - C_1)**2))
+        region_out = torch.mean((1-input) * ((target-C_2)**2))
+                
+        return self.lambdaP * length + (self.mu * region_in + region_out)
+
+class MumfordShahLoss(nn.Module):
+    def __init__(self, lambdaA, weight, ignore_index):
+        super(MumfordShahLoss, self).__init__()
+        self.crossEntropy = nn.CrossEntropyLoss(weight=weight, ignore_index=ignore_index)
+        self.lambdaA = lambdaA
+        
+    def levelsetLoss(self, input, target):
+        input_shape = input.shape
+        target_shape = target.shape
+        loss = 0.0
+        for ich in range(target_shape[1]):
+            target_ = torch.unsqueeze(target[:, ich], 1)
+            target_ = target_.expand(target_shape[0], input_shape[1],
+                                     target_shape[2], target_shape[3], target_shape[4])
+            pcentroid = torch.sum(target_ * input, (2,3,4)) / torch.sum(input, (2,3,4))
+            pcentroid = pcentroid.view(target_shape[0], input_shape[1], 1, 1, 1)
+            plevel = target_ - pcentroid.expand(target_shape[0], input_shape[1],
+                                                target_shape[2], target_shape[3], target_shape[4])
+            pLoss = plevel * plevel * input
+            loss += torch.sum(pLoss)
+        return loss
+    
+    def gradientLoss(self, input):
+        delta_x = torch.abs(input[:,:,1:,:,:] - input[:,:,:-1,:,:])
+        delta_y = torch.abs(input[:,:,:,1:,:] - input[:,:,:,:-1,:])
+        delta_z = torch.abs(input[:,:,:,:,1:] - input[:,:,:,:,:-1])
+        
+        loss = torch.sum(delta_x) + torch.sum(delta_y) + torch.sum(delta_z)
+        return loss
+    
+    def forward(self, input, target):
+        return (self.levelsetLoss(input, target) + self.gradientLoss(input) * 0.001) * self.lambdaA + self.crossEntropy.forward(input[:,0,:,:,:], target)
+
+# class EWCLoss(nn.Module):
+#     def __init__(self, data_loader, device, Loss, lamda=40):
+#         super(EWCLoss, self).__init__()
+#         self.lamda = lamda
+#         self.device = device
+#         self.data_loader = data_loader
+#         self.Loss = Loss
+#         self.sample_size = 1024
+#         self.batch_size = 1
+#         if torch.cuda.device_count() > 1:
+#             self.batch_size = self.batch_size * torch.cuda.device_count()
+            
+#     def _split_training_batch(self, t):
+#         def _move_to_device(input):
+#             if isinstance(input, tuple) or isinstance(input, list):
+#                 return tuple([_move_to_device(x) for x in input])
+#             else:
+#                 return input.to(self.device)
+
+#         t = _move_to_device(t)
+#         weight = None
+#         if len(t) == 2:
+#             input, target = t
+#         else:
+#             input, target, weight = t
+#         return input, target, weight
+    
+#     def estimate_fisher(self):
+#         # sample loglikelihoods from the dataset.
+#         loglikelihoods = []
+#         for i, t in enumerate(self.data_loader):
+#             logger.info(f'estimating fisher information {i}/{len(self.data_loader)}.')
+#             x, y, _ = self._split_training_batch(t)
+#             x = x.view(self.batch_size, -1)
+#             x = Variable(x).cuda()
+#             y = Variable(y).cuda()
+#             loglikelihoods.append(
+#                 F.log_softmax(self(x), dim=1)[range(self.batch_size), y.data]
+#             )
+#             if len(loglikelihoods) >= self.sample_size // self.batch_size:
+#                 break
+#         # estimate the fisher information of the parameters.
+#         loglikelihoods = torch.cat(loglikelihoods).unbind()
+#         loglikelihood_grads = zip(*[torch.autograd.grad(
+#             l, self.parameters(),
+#             retain_graph=(i < len(loglikelihoods))
+#         ) for i, l in enumerate(loglikelihoods, 1)])
+#         loglikelihood_grads = [torch.stack(gs) for gs in loglikelihood_grads]
+#         fisher_diagonals = [(g ** 2).mean(0) for g in loglikelihood_grads]
+#         param_names = [
+#             n.replace('.', '__') for n, p in self.named_parameters()
+#         ]
+#         return {n: f.detach() for n, f in zip(param_names, fisher_diagonals)}
+    
+#     def consolidate(self, fisher):
+#         for n, p in self.named_parameters():
+#             n = n.replace('.', '__')
+#             self.register_buffer('{}_mean'.format(n), p.data.clone())
+#             self.register_buffer('{}_fisher'.format(n), fisher[n].data.clone())
+    
+#     def ewc_loss(self, cuda=False):
+#         try:
+#             losses = []
+#             for n, p in self.named_parameters():
+#                 n = n.replace('.', '__')
+#                 mean = getattr(self, '{}_mean'.format(n))
+#                 fisher = getattr(self, '{}_fisher'.format(n))
+#                 mean = Variable(mean)
+#                 fisher = Variable(fisher)
+#                 losses.append((fisher * (p-mean)**2).sum())
+#             return (self.lamda/2)*sum(losses)
+#         except AttributeError:
+#             return (Variable(torch.zeros(1)).cuda() if cuda else
+#                     Variable(torch.zeros(1)))
+        
+#     def forward(self, input, target):
+#         return self.ewc_loss() + self.Loss.forward(input, target)
 
 class WeightedCrossEntropyLoss(nn.Module):
     """WeightedCrossEntropyLoss (WCE) as described in https://arxiv.org/pdf/1707.03237.pdf
@@ -197,6 +371,18 @@ class WeightedCrossEntropyLoss(nn.Module):
         denominator = flattened.sum(-1)
         class_weights = Variable(nominator / denominator, requires_grad=False)
         return class_weights
+
+
+class MyCrossEntropy(nn.Module):
+    """WeightedCrossEntropyLoss (WCE) as described in https://arxiv.org/pdf/1707.03237.pdf
+    """
+
+    def __init__(self, ignore_index=-1):
+        super(MyCrossEntropy, self).__init__()
+        self.ignore_index = ignore_index
+
+    def forward(self, input, target):
+        return F.cross_entropy(input, torch.squeeze(target.type(torch.DoubleTensor)), ignore_index=self.ignore_index)
 
 
 class PixelWiseCrossEntropyLoss(nn.Module):
@@ -313,7 +499,7 @@ def flatten(tensor):
     return transposed.contiguous().view(C, -1)
 
 
-def get_loss_criterion(config):
+def get_loss_criterion(config, data_loader=None, device=None):
     """
     Returns the loss function based on provided configuration
     :param config: (dict) a top level configuration object containing the 'loss' key
@@ -321,22 +507,22 @@ def get_loss_criterion(config):
     """
     assert 'loss' in config, 'Could not find loss function configuration'
     loss_config = config['loss']
-    name = loss_config.pop('name')
+    name = loss_config.get('name')
 
-    ignore_index = loss_config.pop('ignore_index', None)
-    skip_last_target = loss_config.pop('skip_last_target', False)
-    weight = loss_config.pop('weight', None)
+    ignore_index = loss_config.get('ignore_index', None)
+    skip_last_target = loss_config.get('skip_last_target', False)
+    weight = loss_config.get('weight', None)
 
     if weight is not None:
         # convert to cuda tensor if necessary
         weight = torch.tensor(weight).to(config['device'])
 
-    pos_weight = loss_config.pop('pos_weight', None)
+    pos_weight = loss_config.get('pos_weight', None)
     if pos_weight is not None:
         # convert to cuda tensor if necessary
         pos_weight = torch.tensor(pos_weight).to(config['device'])
 
-    loss = _create_loss(name, loss_config, weight, ignore_index, pos_weight)
+    loss = _create_loss(name, loss_config, weight, ignore_index, pos_weight, data_loader, device)
 
     if not (ignore_index is None or name in ['CrossEntropyLoss', 'WeightedCrossEntropyLoss']):
         # use MaskingLossWrapper only for non-cross-entropy losses, since CE losses allow specifying 'ignore_index' directly
@@ -348,22 +534,49 @@ def get_loss_criterion(config):
     return loss
 
 
-SUPPORTED_LOSSES = ['BCEWithLogitsLoss', 'BCEDiceLoss', 'CrossEntropyLoss', 'WeightedCrossEntropyLoss',
+SUPPORTED_LOSSES = ['BCEWithLogitsLoss', 'BCEDiceLoss', 'ActiveContourLoss', 'ModifiedActiveContourLoss', 'EWCLoss', 'MumfordShahLoss', 'CrossEntropyLoss', 'WeightedCrossEntropyLoss',
                     'PixelWiseCrossEntropyLoss', 'GeneralizedDiceLoss', 'DiceLoss', 'TagsAngularLoss', 'MSELoss',
                     'SmoothL1Loss', 'L1Loss', 'WeightedSmoothL1Loss']
 
 
-def _create_loss(name, loss_config, weight, ignore_index, pos_weight):
+
+def _create_loss(name, loss_config, weight, ignore_index, pos_weight, data_loader=None, device=None):
     if name == 'BCEWithLogitsLoss':
         return nn.BCEWithLogitsLoss(pos_weight=pos_weight)
     elif name == 'BCEDiceLoss':
         alpha = loss_config.get('alphs', 1.)
         beta = loss_config.get('beta', 1.)
         return BCEDiceLoss(alpha, beta)
+    elif name == 'ActiveContourLoss':
+        lambdaP = loss_config.get('lambdaP', 50.)
+        mu = loss_config.get('mu', 1.)
+        return ActiveContourLoss(lambdaP, mu)
+    elif name == 'ModifiedActiveContourLoss':
+        lambdaP = loss_config.get('lambdaP', 50.)
+        mu = loss_config.get('mu', 1.)
+        return ModifiedActiveContourLoss(lambdaP, mu)
+    # elif name == 'EWCLoss':
+    #     assert data_loader is not None, 'EWCLoss necessitates data_loader to be input'        
+    #     lambdaP = loss_config.get('lambdaP', 50.)
+    #     mu = loss_config.get('mu', 1.)
+    #     ACLoss = ActiveContourLoss(lambdaP, mu)
+    #     lamda = loss_config.get('lamda', 50)
+    #     Loss =  EWCLoss(data_loader, device, ACLoss, lamda)
+    #     Loss.consolidate(Loss.estimate_fisher())
+    #     return Loss
+    elif name == 'EWCLoss':
+        lambdaP = loss_config.get('lambdaP', 50.)
+        mu = loss_config.get('mu', 1.)
+        return ActiveContourLoss(lambdaP, mu)
+    elif name == 'MumfordShahLoss':
+        lambdaA = loss_config.get('lambdaA', 10.)
+        if ignore_index is None:
+            ignore_index = -100  # use the default 'ignore_index' as defined in the CrossEntropyLoss
+        return MumfordShahLoss(lambdaA, weight, ignore_index)
     elif name == 'CrossEntropyLoss':
         if ignore_index is None:
             ignore_index = -100  # use the default 'ignore_index' as defined in the CrossEntropyLoss
-        return nn.CrossEntropyLoss(weight=weight, ignore_index=ignore_index)
+        return MyCrossEntropy(ignore_index=ignore_index)
     elif name == 'WeightedCrossEntropyLoss':
         if ignore_index is None:
             ignore_index = -100  # use the default 'ignore_index' as defined in the CrossEntropyLoss

@@ -46,7 +46,7 @@ def save_checkpoint(state, is_best, checkpoint_dir, logger=None):
         shutil.copyfile(last_file_path, best_file_path)
 
 
-def load_checkpoint(checkpoint_path, model, optimizer=None):
+def load_checkpoint(checkpoint_path, model, optimizer=None, strict=True):
     """Loads model and training parameters from a given checkpoint_path
     If optimizer is provided, loads optimizer's state_dict of as well.
 
@@ -63,7 +63,15 @@ def load_checkpoint(checkpoint_path, model, optimizer=None):
         raise IOError(f"Checkpoint '{checkpoint_path}' does not exist")
 
     state = torch.load(checkpoint_path, map_location='cpu')
-    model.load_state_dict(state['model_state_dict'])
+    model_state = {}
+    for k,v in state['model_state_dict'].items():
+        if model.__class__.__name__ == "DataParallel" and not k.startswith("module."):
+            model_state["module." + k] = v
+        else:
+            model_state[k] = v
+    # state = {"module." + k: v for k, v in state.items() if k[:7] !="module."}
+    
+    model.load_state_dict(model_state, strict=strict)
 
     if optimizer is not None:
         optimizer.load_state_dict(state['optimizer_state_dict'])
@@ -166,7 +174,7 @@ def remove_halo(patch, index, shape, patch_halo):
             i_stop = slicing.stop - pad
 
         return slice(p_start, p_stop), slice(i_start, i_stop)
-
+    
     D, H, W = shape
 
     i_c, i_z, i_y, i_x = index

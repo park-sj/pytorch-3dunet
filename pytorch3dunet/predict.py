@@ -50,11 +50,12 @@ def main():
 
     # Create the model
     model = get_model(config)
+    model.testing = True
 
     # Load model state
     model_path = config['model_path']
     logger.info(f'Loading model from {model_path}...')
-    utils.load_checkpoint(model_path, model)
+    utils.load_checkpoint(model_path, model, strict=False)
     # use DataParallel if more than 1 GPU available
     device = config['device']
     if torch.cuda.device_count() > 1 and not device.type == 'cpu':

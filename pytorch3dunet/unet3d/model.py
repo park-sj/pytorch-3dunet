@@ -1,11 +1,25 @@
 import importlib
 
+import torch
 import torch.nn as nn
-
+from torch.nn import functional as F
+from torch.autograd import Variable
 from pytorch3dunet.unet3d.buildingblocks import Encoder, Decoder, DoubleConv, ExtResNetBlock
 from pytorch3dunet.unet3d.utils import number_of_features_per_level
+from pytorch3dunet.unet3d.utils import get_logger
+from collections import namedtuple
+import numpy as np
 
+logger = get_logger('Model')
 
+class _IncompatibleKeys(namedtuple('IncompatibleKeys', ['missing_keys', 'unexpected_keys'])):
+    def __repr__(self):
+        if not self.missing_keys and not self.unexpected_keys:
+            return '<All keys matched successfully>'
+        return super(_IncompatibleKeys, self).__repr__()
+
+    __str__ = __repr__
+    
 class Abstract3DUNet(nn.Module):
     """
     Base class for standard and residual UNet.
@@ -35,7 +49,7 @@ class Abstract3DUNet(nn.Module):
             after the final convolution; if False (regression problem) the normalization layer is skipped at the end
         testing (bool): if True (testing mode) the `final_activation` (if present, i.e. `is_segmentation=true`)
             will be applied as the last operation during the forward pass; if False the model is in training mode
-            and the `final_activation` (even if present) won't be applied; default: False
+            and the `final_activation` (even if present) won't be applied; de1fault: False
         conv_kernel_size (int or tuple): size of the convolving kernel in the basic_module
         pool_kernel_size (int or tuple): the size of the window
         conv_padding (int or tuple): add zero-padding added to all three sides of the input
@@ -134,10 +148,26 @@ class Abstract3DUNet(nn.Module):
 
         # apply final_activation (i.e. Sigmoid or Softmax) only during prediction. During training the network outputs
         # logits and it's up to the user to normalize it before visualising with tensorboard or computing validation metric
+
         if self.testing and self.final_activation is not None:
             x = self.final_activation(x)
 
         return x
+    
+    # def get_feature(self):
+    #     x = torch.ones.
+    #     return get_feature_with_input(x)
+    
+    # def get_feature_with_input(self, x = None):
+    #     if x is None:
+    #         x = torch.ones((1,1,300,300,300))
+    #     encoders_features = []
+    #     for encoder in self.encoders:
+    #         x = encoder(x)
+    #         # reverse the encoder outputs to be aligned with the decoder
+    #         encoders_features.insert(0, x)
+        
+    #     return encoders_features
 
 
 class UNet3D(Abstract3DUNet):
@@ -174,6 +204,168 @@ class ResidualUNet3D(Abstract3DUNet):
                                              is_segmentation=is_segmentation, conv_padding=conv_padding,
                                              **kwargs)
 
+class ResidualUNet3DEWC(ResidualUNet3D):
+    def __init__(self, in_channels, out_channels, final_sigmoid=True, f_maps=64, layer_order='gcr',
+                 num_groups=8, num_levels=5, is_segmentation=True, conv_padding=1, **kwargs):
+        super(ResidualUNet3DEWC, self).__init__(in_channels=in_channels, out_channels=out_channels,
+                                                final_sigmoid=final_sigmoid, f_maps=f_maps,
+                                                layer_order=layer_order, num_groups=num_groups,
+                                                num_levels=num_levels, is_segmentation=is_segmentation,
+                                                conv_padding=conv_padding, **kwargs)
+        self.emp_FI = False
+        self.ewc_lambda = 0
+        self.gamma = 1.
+        self.online = True
+        self.EWC_task_count = 0
+            
+    def estimate_fisher(self, data_loader, device, sample_size, allowed_classes=None, collate_fn=None):
+        '''After completing training on a task, estimate diagonal of Fisher Information matrix.
+        [dataset]:          <DataSet> to be used to estimate FI-matrix
+        [allowed_classes]:  <list> with class-indeces of 'allowed' or 'active' classes'''
+        self._device = device
+        # Prepare <dict> to store estimated Fisher Information matrix
+        est_fisher_info = {}
+        for n, p in self.named_parameters():
+            if p.requires_grad:
+                n = n.replace('.', '__')
+                est_fisher_info[n] = p.detach().clone().zero_()
+
+        # Set model to evaluation mode
+        mode = self.training
+        self.eval()
+
+        # Create data-loader to give batches of size 1
+        # data_loader = utils.get_data_loader(dataset, batch_size=1, cuda=self._is_on_cuda(), collate_fn=collate_fn)
+
+        # Estimate the FI-matrix for [self.fisher_n] batches of size 1
+        for index,(x,y) in enumerate(data_loader):
+            # break from for-loop if max number of samples has been reached
+            if sample_size is not None:
+                if index >= sample_size:
+                    break
+            # run forward pass of model
+            x = x.to(self._device)
+            output = self(x) if allowed_classes is None else self(x)[:, allowed_classes]
+            if self.emp_FI:
+                # -use provided label to calculate loglikelihood --> "empirical Fisher":
+                label = torch.LongTensor([y]) if type(y)==int else y
+                if allowed_classes is not None:
+                    label = [int(np.where(i == allowed_classes)[0][0]) for i in label.numpy()]
+                    label = torch.LongTensor(label)
+                label = label.to(self._device)
+            else:
+                # -use predicted label to calculate loglikelihood:
+                label = output.max(1)[1]
+            # calculate negative log-likelihood
+            negloglikelihood = F.nll_loss(F.log_softmax(output, dim=1), label)
+
+            # Calculate gradient of negative loglikelihood
+            self.zero_grad()
+            negloglikelihood.backward()
+
+            # Square gradients and keep running sum
+            for n, p in self.named_parameters():
+                if p.requires_grad:
+                    n = n.replace('.', '__')
+                    if p.grad is not None:
+                        est_fisher_info[n] += p.grad.detach() ** 2
+
+        # Normalize by sample size used for estimation
+        est_fisher_info = {n: p/index for n, p in est_fisher_info.items()}
+
+        # Store new values in the network
+        for n, p in self.named_parameters():
+            if p.requires_grad:
+                n = n.replace('.', '__')
+                # -mode (=MAP parameter estimate)
+                self.register_buffer('{}_EWC_prev_task{}'.format(n, "" if self.online else self.EWC_task_count+1),
+                                     p.detach().clone())
+                # -precision (approximated by diagonal Fisher Information matrix)
+                if self.online and self.EWC_task_count==1:
+                    existing_values = getattr(self, '{}_EWC_estimated_fisher'.format(n))
+                    est_fisher_info[n] += self.gamma * existing_values
+                self.register_buffer('{}_EWC_estimated_fisher{}'.format(n, "" if self.online else self.EWC_task_count+1),
+                                     est_fisher_info[n])
+
+        # If "offline EWC", increase task-count (for "online EWC", set it to 1 to indicate EWC-loss can be calculated)
+        self.EWC_task_count = 1 if self.online else self.EWC_task_count + 1
+
+        # Set model back to its initial mode
+        self.train(mode=mode)
+
+
+    def ewc_loss(self):
+        '''Calculate EWC-loss.'''
+        if self.EWC_task_count>0:
+            losses = []
+            # If "offline EWC", loop over all previous tasks (if "online EWC", [EWC_task_count]=1 so only 1 iteration)
+            for task in range(1, self.EWC_task_count+1):
+                for n, p in self.named_parameters():
+                    if p.requires_grad:
+                        # Retrieve stored mode (MAP estimate) and precision (Fisher Information matrix)
+                        n = n.replace('.', '__')
+                        mean = getattr(self, '{}_EWC_prev_task{}'.format(n, "" if self.online else task))
+                        fisher = getattr(self, '{}_EWC_estimated_fisher{}'.format(n, "" if self.online else task))
+                        # If "online EWC", apply decay-term to the running sum of the Fisher Information matrices
+                        fisher = self.gamma*fisher if self.online else fisher
+                        # Calculate EWC-loss
+                        losses.append((fisher * (p-mean)**2).sum())
+            # Sum EWC-loss from all parameters (and from all tasks, if "offline EWC")
+            return (1./2)*sum(losses)
+        else:
+            # EWC-loss is 0 if there are no stored mode and precision yet
+            return torch.tensor(0., device=self._device)
+        
+    # def load_state_dict(self, state_dict, strict=True):
+    #     r"""Copies parameters and buffers from :attr:`state_dict` into
+    #     this module and its descendants. If :attr:`strict` is ``True``, then
+    #     the keys of :attr:`state_dict` must exactly match the keys returned
+    #     by this module's :meth:`~torch.nn.Module.state_dict` function.
+
+    #     Arguments:
+    #         state_dict (dict): a dict containing parameters and
+    #             persistent buffers.
+    #         strict (bool, optional): whether to strictly enforce that the keys
+    #             in :attr:`state_dict` match the keys returned by this module's
+    #             :meth:`~torch.nn.Module.state_dict` function. Default: ``True``
+
+    #     Returns:
+    #         ``NamedTuple`` with ``missing_keys`` and ``unexpected_keys`` fields:
+    #             * **missing_keys** is a list of str containing the missing keys
+    #             * **unexpected_keys** is a list of str containing the unexpected keys
+    #     """
+    #     missing_keys = []
+    #     unexpected_keys = []
+    #     error_msgs = []
+
+    #     # copy state_dict so _load_from_state_dict can modify it
+    #     metadata = getattr(state_dict, '_metadata', None)
+    #     state_dict = state_dict.copy()
+    #     if metadata is not None:
+    #         state_dict._metadata = metadata
+
+    #     def load(module, prefix=''):
+    #         local_metadata = {} if metadata is None else metadata.get(prefix[:-1], {})
+    #         module._load_from_state_dict(
+    #             state_dict, prefix, local_metadata, True, missing_keys, unexpected_keys, error_msgs)
+    #         for name, child in module._modules.items():
+    #             if child is not None:
+    #                 load(child, prefix + name + '.')
+
+    #     load(self)
+    #     load = None  # break load->load reference cycle
+
+    #     if strict:
+    #         if len(unexpected_keys) > 0:
+    #             error_msgs.insert(
+    #                 0, 'Unexpected key(s) in state_dict: {}. '.format(
+    #                     ', '.join('"{}"'.format(k) for k in unexpected_keys)))
+    #         if len(missing_keys) > 0:
+    #             error_msgs.insert(
+    #                 0, 'Missing key(s) in state_dict: {}. '.format(
+    #                     ', '.join('"{}"'.format(k) for k in missing_keys)))
+
+    #     return _IncompatibleKeys(missing_keys, unexpected_keys)
 
 class UNet2D(Abstract3DUNet):
     """
@@ -201,9 +393,13 @@ class UNet2D(Abstract3DUNet):
 
 def get_model(config):
     def _model_class(class_name):
-        m = importlib.import_module('pytorch3dunet.unet3d.model')
-        clazz = getattr(m, class_name)
-        return clazz
+        modules = ['pytorch3dunet.unet3d.model', 'pytorch3dunet.unet3d.rev_model']
+        for module in modules:
+            m = importlib.import_module(module)
+            clazz = getattr(m, class_name, None)
+            if clazz:
+                return clazz
+        raise RuntimeError(f'Unsupported model class: {class_name}')
 
     assert 'model' in config, 'Could not find model configuration'
     model_config = config['model']

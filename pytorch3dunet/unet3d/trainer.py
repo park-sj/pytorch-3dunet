@@ -120,7 +120,7 @@ class UNet3DTrainer:
                         eval_score_higher_is_better=True, best_eval_score=None,
                         tensorboard_formatter=None, skip_train_validation=False):
         logger.info(f"Logging pre-trained model from '{pre_trained}'...")
-        utils.load_checkpoint(pre_trained, model, None)
+        utils.load_checkpoint(pre_trained, model, None, strict=False)
         checkpoint_dir = os.path.split(pre_trained)[0]
         return cls(model, optimizer, lr_scheduler,
                    loss_criterion, eval_criterion,
@@ -244,10 +244,10 @@ class UNet3DTrainer:
 
     def validate(self, val_loader):
         logger.info('Validating...')
-
         val_losses = utils.RunningAverage()
         val_scores = utils.RunningAverage()
-
+        
+        
         with torch.no_grad():
             for i, t in enumerate(val_loader):
                 logger.info(f'Validation iteration {i}')
@@ -300,6 +300,9 @@ class UNet3DTrainer:
             loss = self.loss_criterion(output, target)
         else:
             loss = self.loss_criterion(output, target, weight)
+        
+        if hasattr(self, 'ewc_loss'):
+            loss += self.model.ewc_loss
 
         return output, loss
 

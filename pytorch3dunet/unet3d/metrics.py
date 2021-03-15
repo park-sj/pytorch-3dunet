@@ -469,7 +469,7 @@ class PSNR:
 
     def __call__(self, input, target):
         input, target = convert_to_numpy(input, target)
-        return peak_signal_noise_ratio(target, input)
+        return peak_signal_noise_ratio(target, input, data_range=100)
 
 
 class WithinAngleThreshold:

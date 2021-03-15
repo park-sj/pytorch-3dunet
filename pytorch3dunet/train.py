@@ -5,7 +5,7 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
-from pytorch3dunet.datasets.utils import get_train_loaders
+from pytorch3dunet.datasets.utils import get_train_loaders, get_dejavu_loader
 from pytorch3dunet.unet3d.config import load_config
 from pytorch3dunet.unet3d.losses import get_loss_criterion
 from pytorch3dunet.unet3d.metrics import get_evaluation_metric
@@ -75,7 +75,7 @@ def _create_lr_scheduler(config, optimizer):
         class_name = lr_config.pop('name')
         m = importlib.import_module('torch.optim.lr_scheduler')
         clazz = getattr(m, class_name)
-        # add optimizer to the config
+        # atrainingdd optimizer to the config
         lr_config['optimizer'] = optimizer
         return clazz(**lr_config)
 
@@ -84,6 +84,8 @@ def main():
     # Load and log experiment configuration
     config = load_config()
     logger.info(config)
+
+    # torch.cuda.set_enabled_lms(True)
 
     manual_seed = config.get('manual_seed', None)
     if manual_seed is not None:
@@ -107,17 +109,29 @@ def main():
 
     # Log the number of learnable parameters
     logger.info(f'Number of learnable params {get_number_of_learnable_parameters(model)}')
-
-    # Create loss criterion
-    loss_criterion = get_loss_criterion(config)
-    # Create evaluation metric
-    eval_criterion = get_evaluation_metric(config)
-
+    
     # Create data loaders
     loaders = get_train_loaders(config)
-
+    logger.info(f'The size of train/val dataset is {len(loaders["train"])}/{len(loaders["val"])}')
+    
     # Create the optimizer
     optimizer = _create_optimizer(config, model)
+    
+    # Create loss criterion
+    loss_criterion = get_loss_criterion(config)
+
+    if config['loss']['name'] == 'EWCLoss':
+        # loss_criterion += model.ewc_loss
+        loader = get_dejavu_loader(config)
+        if torch.cuda.device_count() > 1 and not device.type == 'cpu':
+            model.module.estimate_fisher(loader, device, 1)
+        else:
+            model.estimate_fisher(loader, device, 1)
+    # if torch.cuda.device_count() > 1 and not device.type == 'cpu':
+    #     model = nn.DataParallel(model)
+        
+    # Create evaluation metric
+    eval_criterion = get_evaluation_metric(config)
 
     # Create learning rate adjustment strategy
     lr_scheduler = _create_lr_scheduler(config, optimizer)

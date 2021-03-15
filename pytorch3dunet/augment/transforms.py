@@ -577,7 +577,7 @@ class Normalize:
 
 
 class AdditiveGaussianNoise:
-    def __init__(self, random_state, scale=(0.0, 1.0), execution_probability=0.1, **kwargs):
+    def __init__(self, random_state, scale=(0.0, 0.2), execution_probability=0.9, **kwargs):
         self.execution_probability = execution_probability
         self.random_state = random_state
         self.scale = scale
