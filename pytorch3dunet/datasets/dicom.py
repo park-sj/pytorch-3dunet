@@ -13,11 +13,11 @@ import numpy as np
 import glob
 import pydicom
 import SimpleITK as sitk
-import perlin
 from skimage.filters import laplace
 from skimage.transform import downscale_local_mean, resize
 
 import pytorch3dunet.augment.transforms as transforms
+from pytorch3dunet.datasets.perlin import generate_perlin_noise_3d
 from pytorch3dunet.datasets.utils import get_slice_builder, ConfigDataset, calculate_stats
 from pytorch3dunet.unet3d.utils import get_logger
 
@@ -145,8 +145,8 @@ class DicomDataset(ConfigDataset):
             # mask = np.expand_dims(mask, 0)
             mask = self._transform_patches(self.cur_mask, mask, self.masks_transform)
             if self.phase == 'train':
-                # image += np.random.normal(0,0.2, image.shape).astype(np.float32) # Gaussian noise
-                image += perlin.generate_perlin_noise_3d((296, 296, 296), (37, 37, 37))/2 # Perlin noise
+                image += np.random.normal(0,0.2, image.shape).astype(np.float32) # Gaussian noise
+                image += resize(generate_perlin_noise_3d((256,256,256), (16,16,16)), (296,296,296)) # Perlin noise
             return image, mask
         else:
 
