@@ -235,6 +235,7 @@ class StandardPredictor(_AbstractPredictor):
         # newArray = skimage.transform.resize(newArray, (newArray.shape[0]*2, newArray.shape[1]*2, newArray.shape[2]*2), anti_aliasing=False)
         newArray[newArray > 0.5] = 1
         newArray[newArray <= 0.5] = 0
+        # newArray *= 1000
         # for _ in range(10):
         #     newArray = scipy.ndimage.binary_erosion(scipy.ndimage.binary_dilation(newArray))
         #     newArray = scipy.ndimage.binary_dilation(scipy.ndimage.binary_erosion(newArray))
@@ -250,45 +251,56 @@ class StandardPredictor(_AbstractPredictor):
         newImage.CopyInformation(oldImage)
         writer = sitk.ImageFileWriter()
         writer.KeepOriginalImageUIDOn()
-        # tags_to_copy = [
-        #                 "0010|0010",
-        #                 "0010|0020",
-        #                 "0010|0030",
-        #                 "0020|000d",
-        #                 "0020|0010",
-        #                 "0008|0020",
-        #                 "0008|0030",
-        #                 "0008|0050",
-        #                 "0008|0060",
-        #                 ]
-    #    tags_to_copy = list(reader.GetMetaDataKeys(0))
-
+        sp_x, sp_y = reader.GetMetaData(0, "0028|0030").split('\\')
+        # sp_z = reader.GetMetaData(0, "0018|0050")
+        _, _, z_0 = reader.GetMetaData(0, "0020|0032").split('\\')
+        _, _, z_1 = reader.GetMetaData(1, "0020|0032").split('\\')
+        spacing_ratio = np.array([1, 1, 1], dtype=np.float64)
+        sp_z = abs(float(z_0) - float(z_1))
+        sp_z = float(sp_z) / spacing_ratio[0]
+        sp_x = float(sp_x) / spacing_ratio[1]
+        sp_y = float(sp_y) / spacing_ratio[2]
         modification_time = time.strftime("%H%M%S")
         modification_date = time.strftime("%Y%m%d")
         direction = newImage.GetDirection()
         series_tag_values = [(k, reader.GetMetaData(0, k)) for k in reader.GetMetaDataKeys(0)] + \
-                            [("0008|0031", modification_time),
+                             [("0008|0031", modification_time),
                              ("0008|0021", modification_date),
+                             ("0028|0010", "296"),
+                             ("0028|0011", "296"),
+                             ("0028|0100", "16"),
+                             ("0028|0101", "16"),
+                             ("0028|0102", "15"),
+                             ("0028|0103", "1"),
+                             ("0028|0002", "1"),
                              ("0008|0008", "DERIVED\\SECONDARY"),
                              ("0020|000e", "1.2.826.0.1.3680043.2.1125." + modification_date + ".1" + modification_time),
                              ("0020|0037", '\\'.join(map(str, (direction[0], direction[3], direction[6], direction[1], direction[4], direction[7]))))]
     #                         ("0008|103e", reader.GetMetaData(0, "0008|103e") + " Processed-SimpleITK")]
     #    print(series_tag_values)
-        
         logger.info(f'Saving mask into {filepath}')
+        tags_to_skip = ['0010|0010', '0028|0030', '7fe0|0010', '7fe0|0000', '0028|1052',
+                        '0028|1053', '0028|1054', '0010|4000', '0008|1030', '0010|1001',
+                        '0008|0080']
         for i in range(newImage.GetDepth()):
             image_slice = newImage[:, :, i]
-            image_slice.CopyInformation(oldImage[:, :, i])
+            # image_slice.CopyInformation(oldImage[:, :, i])
             for tag, value in series_tag_values:
-                if i == 0:
-                    logger.info(f'{tag}')
-                if (tag == '0010|0010'):
+                if (tag in tags_to_skip):
                     continue
+                if i == 0:
+                    try:
+                        logger.info(f'{tag} | {value}')
+                    except:
+                        continue
                 image_slice.SetMetaData(tag, value)
             image_slice.SetMetaData("0008|0012", time.strftime("%Y%m%d"))
             image_slice.SetMetaData("0008|0013", time.strftime("%H%M%S"))
-            image_slice.SetMetaData('0020|0032', '\\'.join(map(str, newImage.TransformIndexToPhysicalPoint((0, 0, i)))))
+            image_slice.SetMetaData('0020|0032', '\\'.join(map(str, [0, 0, i*sp_z])))
             image_slice.SetMetaData("0020|0013", str(i))
+            image_slice.SetMetaData('0028|0030', '\\'.join(map(str, [sp_x, sp_y])))
+            image_slice.SetSpacing([sp_x, sp_y])
+            image_slice.SetMetaData("0018|0050", str(sp_z))
             writer.SetFileName(os.path.join(filepath, str(i).zfill(3) + '.dcm'))
             writer.Execute(image_slice)
         logger.info(f'Saved mask into {filepath}')
