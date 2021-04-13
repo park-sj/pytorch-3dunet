@@ -95,7 +95,7 @@ class DicomDataset(ConfigDataset):
         
         # min_value, max_value, mean, std = calculate_stats(self.cur_image.astype(np.float32))
         self.min_value = -750
-        self.max_value = 3250
+        self.max_value = 1250
         self.cur_image[self.cur_image>self.max_value] = self.max_value
         self.cur_image[self.cur_image<self.min_value] = self.min_value
         self.cur_image = resize(self.cur_image.astype(np.float32), (296, 296, 296), anti_aliasing = False)
@@ -145,10 +145,10 @@ class DicomDataset(ConfigDataset):
             # mask = np.expand_dims(mask, 0)
             mask = self._transform_patches(self.cur_mask, mask, self.masks_transform)
             if self.phase == 'train':
-                image += np.random.normal(0,0.1, image.shape).astype(np.float32) # Gaussian noise
-                # noise = generate_perlin_noise_3d((296,296,296), (8,8,8))*0.4
-                # noise[noise<0] = 0
-                # image += noise # Perlin noise
+                image += np.random.normal(0,0.2, image.shape).astype(np.float32) # Gaussian noise
+                noise = generate_perlin_noise_3d((296,296,296), (8,8,8))*0.5
+                noise[noise<0] = 0
+                image += noise # Perlin noise
             return image, mask
         else:
 
