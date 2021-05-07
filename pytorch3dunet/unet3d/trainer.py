@@ -168,10 +168,11 @@ class UNet3DTrainer:
             logger.info(
                 f'Training iteration {self.num_iterations}. Batch {i}. Epoch [{self.num_epoch}/{self.max_num_epochs - 1}]')
 
-            input, target, weight = self._split_training_batch(t)
+            input, target, name = self._split_training_batch(t)
 
-            output, loss = self._forward_pass(input, target, weight)
-
+            output, loss = self._forward_pass(input, target)
+            logger.info(
+                f'{name} - {loss}')
             train_losses.update(loss.item(), self._batch_size(input))
 
             # compute gradients and update parameters
@@ -251,10 +252,10 @@ class UNet3DTrainer:
         with torch.no_grad():
             for i, t in enumerate(val_loader):
                 logger.info(f'Validation iteration {i}')
+                input, target, name = self._split_training_batch(t)
 
-                input, target, weight = self._split_training_batch(t)
+                output, loss = self._forward_pass(input, target)
 
-                output, loss = self._forward_pass(input, target, weight)
                 val_losses.update(loss.item(), self._batch_size(input))
 
                 # if model contains final_activation layer for normalizing logits apply it, otherwise
@@ -266,6 +267,8 @@ class UNet3DTrainer:
                     self._log_images(input, target, output, 'val_')
 
                 eval_score = self.eval_criterion(output, target)
+                logger.info(
+                    f'{name} - {loss}, {eval_score}')
                 val_scores.update(eval_score.item(), self._batch_size(input))
 
                 if self.validate_iters is not None and self.validate_iters <= i:
@@ -281,7 +284,10 @@ class UNet3DTrainer:
             if isinstance(input, tuple) or isinstance(input, list):
                 return tuple([_move_to_device(x) for x in input])
             else:
-                return input.to(self.device)
+                try:
+                    return input.to(self.device)
+                except:
+                    return input
 
         t = _move_to_device(t)
         weight = None

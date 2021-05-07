@@ -132,6 +132,7 @@ class DicomDataset(ConfigDataset):
         # self.getImage(int(idx % len(self.patients)))
         # logger.info(f'getting item number {idx}')
         self.getImage(int(idx / self.patch_per_image))
+        name = self.patients[int(idx / self.patch_per_image)]
         
         idx = idx % self.patch_per_image
         image = self.image_slices[idx]
@@ -146,10 +147,10 @@ class DicomDataset(ConfigDataset):
             mask = self._transform_patches(self.cur_mask, mask, self.masks_transform)
             if self.phase == 'train':
                 image += np.random.normal(0,0.2, image.shape).astype(np.float32) # Gaussian noise
-                noise = generate_perlin_noise_3d((296,296,296), (8,8,8))*0.5
-                noise[noise<0] = 0
-                image += noise # Perlin noise
-            return image, mask
+                # noise = generate_perlin_noise_3d((296,296,296), (8,8,8))*0.5
+                # noise[noise<0] = 0
+                # image += noise # Perlin noise
+            return image, mask, name
         else:
 
             # image = np.expand_dims(image, 0)

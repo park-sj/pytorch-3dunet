@@ -281,7 +281,7 @@ class StandardPredictor(_AbstractPredictor):
         logger.info(f'Saving mask into {filepath}')
         tags_to_skip = ['0010|0010', '0028|0030', '7fe0|0010', '7fe0|0000', '0028|1052',
                         '0028|1053', '0028|1054', '0010|4000', '0008|1030', '0010|1001',
-                        '0008|0080']
+                        '0008|0080', '0010|0040']
         for i in range(newImage.GetDepth()):
             image_slice = newImage[:, :, i]
             # image_slice.CopyInformation(oldImage[:, :, i])
