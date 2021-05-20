@@ -11,7 +11,6 @@ Load .dcm dataset
 import os
 import numpy as np
 import glob
-import pydicom
 import SimpleITK as sitk
 from skimage.filters import laplace
 from skimage.transform import downscale_local_mean, resize
@@ -86,11 +85,10 @@ class DicomDataset(ConfigDataset):
         if self.phase == 'test':
             logger.info(f'Loading dcm files from {os.path.join(self.file_path, self.phase, self.patients[count])}')
         self.cur_image = self._load_files(os.path.join(self.file_path, self.phase, self.patients[count]))
-        # self.cur_image = (self.cur_image + laplace(self.cur_image) * 1e3).astype(np.int16)
-        # self.cur_image = self.cur_image[:400, 100:500, 100:500]
+        if self.phase != 'test' and self.cur_image.shape[0]>=600:
+            self.cur_image = self.cur_image[100:-100, :, :]
         # self.cur_image = self.cur_image[20:580, 20:580, 20:580]
         # self.cur_image = self.cur_image[4:596, 4:596, 4:596]
-        # self.cur_image = downscale_local_mean(self.cur_image, (2,2,2))
         
         
         # min_value, max_value, mean, std = calculate_stats(self.cur_image.astype(np.float32))
@@ -109,11 +107,8 @@ class DicomDataset(ConfigDataset):
         self.cur_image = np.expand_dims(self.cur_image, 0)        
         if self.phase != 'test':
             self.cur_mask = self._load_files(os.path.join(self.file_path, self.phase + '_masks', self.patients[count]))
-            # self.cur_mask = np.flip(self.cur_mask, 2)
-            # self.cur_mask = self.cur_mask[:400, 100:500, 100:500]
-            # self.cur_mask = self.cur_mask[20:580, 20:580, 20:580]
-            # self.cur_mask = self.cur_mask[4:596, 4:596, 4:596]
-            # self.cur_mask = downscale_local_mean(self.cur_mask, (2,2,2))
+            if self.cur_mask.shape[0] >= 600:
+                self.cur_mask = self.cur_mask[100:-100, :, :]
             self.cur_mask = resize(self.cur_mask.astype(np.float32), (296, 296, 296), anti_aliasing = False)
             self.cur_mask = np.expand_dims(self.cur_mask, 0)
         else:
@@ -202,48 +197,4 @@ class DicomDataset(ConfigDataset):
         image = reader.Execute()
         img3d = sitk.GetArrayFromImage(image)
         # img3d = img3d.transpose((1,2,0))
-        return img3d
-    
-    @staticmethod
-    def _load_files_legacy(dir):
-        """ THIS FUNCTION IS DEPRECATED DUE TO THE PERFORMANCE ISSUE!
-            USE _load_files INSTEAD.
-            dir is a root directory that contains folders account for each patient
-            files_data is a list of 3d dicom data """
-        
-        dir = os.path.join(dir, '*')
-        
-        # load the DICOM files
-        files = []
-        for fname in glob.glob(dir, recursive=False):
-            # print("loading: {}".format(fname))
-            files.append(pydicom.dcmread(fname))
-        
-        # logger.info(f"file path : {dir}, file count: {len(files)}")
-        
-        # skip files with no SliceLocation (eg scout views)
-        slices = []
-        skipcount = 0
-        for f in files:
-            if hasattr(f, 'InstanceNumber'):
-                slices.append(f)
-            else:
-                skipcount = skipcount + 1
-        
-        # ensure they are in the correct order
-    #    slices = sorted(slices, key=lambda s: s.InstanceNumber)
-        slices, files = zip(*sorted(zip(slices,files), key = lambda s: s[0].InstanceNumber))
-    #    [file for _, file in sorted(zip(slices,files), key = lambda s: s[0].InstanceNumber)]
-    #    sorted(files, key=lambda s: slices.InstanceNumber)
-        
-        # create 3D array
-        img_shape = list(slices[0].pixel_array.shape)
-        img_shape.append(len(slices))
-        img3d = np.zeros(img_shape, dtype = np.int16)
-        
-        # fill 3D array with the images from the files
-        for i, s in enumerate(slices):
-            img2d = s.pixel_array.astype(dtype = np.int16)
-            img3d[:, :, i] = img2d
-
         return img3d
