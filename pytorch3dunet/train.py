@@ -4,6 +4,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.optim.lr_scheduler import ReduceLROnPlateau
+from pytorch3dunet.unet3d.scheduler import CosineAnnealingWarmUpRestarts
 
 from pytorch3dunet.datasets.utils import get_train_loaders, get_dejavu_loader
 from pytorch3dunet.unet3d.config import load_config
@@ -62,7 +63,7 @@ def _create_optimizer(config, model):
     optimizer_config = config['optimizer']
     learning_rate = optimizer_config['learning_rate']
     weight_decay = optimizer_config['weight_decay']
-    optimizer = optim.Adam(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
+    optimizer = optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
     return optimizer
 
 
@@ -73,7 +74,7 @@ def _create_lr_scheduler(config, optimizer):
         return ReduceLROnPlateau(optimizer, mode='max', factor=0.5, patience=20, verbose=True)
     else:
         class_name = lr_config.pop('name')
-        m = importlib.import_module('torch.optim.lr_scheduler')
+        m = importlib.import_module('torch.optim.lr_scheduler', 'pytorch3dunet.unet3d.scheduler')
         clazz = getattr(m, class_name)
         # atrainingdd optimizer to the config
         lr_config['optimizer'] = optimizer

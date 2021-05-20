@@ -4,6 +4,7 @@ import torch
 import torch.nn as nn
 from tensorboardX import SummaryWriter
 from torch.optim.lr_scheduler import ReduceLROnPlateau
+from pytorch3dunet.unet3d.scheduler import CosineAnnealingWarmUpRestarts
 
 from pytorch3dunet.unet3d.utils import get_logger
 from . import utils
@@ -191,6 +192,8 @@ class UNet3DTrainer:
                 # adjust learning rate if necessary
                 if isinstance(self.scheduler, ReduceLROnPlateau):
                     self.scheduler.step(eval_score)
+                elif isinstance(self.scheduler, CosineAnnealingWarmUpRestarts):
+                    self.scheduler.step(epoch=self.num_iterations)
                 else:
                     self.scheduler.step()
                 # log current learning rate in tensorboard
@@ -235,11 +238,11 @@ class UNet3DTrainer:
             logger.info(f'Maximum number of iterations {self.max_num_iterations} exceeded.')
             return True
 
-        min_lr = 1e-6
-        lr = self.optimizer.param_groups[0]['lr']
-        if lr < min_lr:
-            logger.info(f'Learning rate below the minimum {min_lr}.')
-            return True
+        # min_lr = 1e-6
+        # lr = self.optimizer.param_groups[0]['lr']
+        # if lr < min_lr:
+        #     logger.info(f'Learning rate below the minimum {min_lr}.')
+        #     return True
 
         return False
 
