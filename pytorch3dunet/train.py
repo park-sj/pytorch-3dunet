@@ -81,7 +81,7 @@ def _create_lr_scheduler(config, optimizer):
             clazz = getattr(m, class_name, None)
             if clazz is not None:
                 return clazz(**lr_config)
-            raise RuntimeError(f'Unsupported lr_scheduler class: {class_name}')
+        raise RuntimeError(f'Unsupported lr_scheduler class: {class_name}')
 
 
 def main():
