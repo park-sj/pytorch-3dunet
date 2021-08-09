@@ -90,7 +90,10 @@ class DicomDataset(ConfigDataset):
             self.cur_image = self.cur_image[100:-100, :, :]
         # self.cur_image = self.cur_image[20:580, 20:580, 20:580]
         # self.cur_image = self.cur_image[4:596, 4:596, 4:596]
-        
+        self.flip = False
+        if random.getrandbits(1):
+            self.flip = True
+            self.cur_image = self.cur_image[:,:,::-1]
         
         # min_value, max_value, mean, std = calculate_stats(self.cur_image.astype(np.float32))
         self.min_value = -750
@@ -108,9 +111,9 @@ class DicomDataset(ConfigDataset):
         self.cur_image = np.expand_dims(self.cur_image, 0)        
         if self.phase != 'test':
             self.cur_mask = self._load_files(os.path.join(self.file_path, self.phase + '_masks', self.patients[count]))
-            if random.getrandbits(1):
-                self.cur_image.flip(axis=2)
-                self.cur_mask.flip(axis=2)
+            if self.flip:
+            #     self.cur_image = self.cur_image[:,::-1,:]
+                self.cur_mask = self.cur_mask[:,:,::-1]
             if self.cur_mask.shape[0] >= 600:
                 self.cur_mask = self.cur_mask[100:-100, :, :]
             self.cur_mask = resize(self.cur_mask.astype(np.float32), (296, 296, 296), anti_aliasing = False)
