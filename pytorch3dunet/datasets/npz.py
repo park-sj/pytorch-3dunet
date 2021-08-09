@@ -25,7 +25,7 @@ from pytorch3dunet.unet3d.utils import get_logger
 
 logger = get_logger('NpzDataset')
 
-class DicomDataset(ConfigDataset):
+class NpzDataset(ConfigDataset):
     def __init__(self, file_path, phase, slice_builder_config, transformer_config, mirror_padding=(0, 32, 32)):
         """
         :param file_path: path to dicom root directory
