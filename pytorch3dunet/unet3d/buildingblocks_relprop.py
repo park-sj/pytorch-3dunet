@@ -396,6 +396,133 @@ class Conv3d(nn.Conv3d, RelProp):
         else:
             Rp = backward(R_p, px, nx, pw, nw)
         return Rp
+    
+class ConvTranspose3d(nn.ConvTranspose3d, RelProp):
+    '''
+    일단은 Conv3d 그대로 배껴놓은 상태로 나뒀는데 Conv3d와 ConvTranspose3d는 동작이 반대이다.
+    Conv3d 과정을 우선 이해해야한다.
+    '''
+    def gradprop2(self, DY, weight):
+        Z = self.forward(self.X)
+
+        output_padding = self.X.size()[2] - (
+                (Z.size()[2] - 1) * self.stride[0] - 2 * self.padding[0] + self.kernel_size[0])
+
+        return F.conv_transpose3d(DY, weight, stride=self.stride, padding=self.padding, output_padding=output_padding)
+
+    def relprop(self, R, alpha):
+        if self.X.shape[1] == 1:
+            pw = torch.clamp(self.weight, min=0)
+            nw = torch.clamp(self.weight, max=0)
+            X = self.X
+            L = self.X * 0 + \
+                torch.min(torch.min(torch.min(torch.min(self.X, dim=1, keepdim=True)[0], dim=2, keepdim=True)[0], dim=3,
+                          keepdim=True)[0], dim=4)[0]
+            H = self.X * 0 + \
+                torch.max(torch.max(torch.max(torch.max(self.X, dim=1, keepdim=True)[0], dim=2, keepdim=True)[0], dim=3,
+                          keepdim=True)[0], dim=4)[0]
+            Za = torch.conv3d(X, self.weight, bias=None, stride=self.stride, padding=self.padding) - \
+                 torch.conv3d(L, pw, bias=None, stride=self.stride, padding=self.padding) - \
+                 torch.conv3d(H, nw, bias=None, stride=self.stride, padding=self.padding) + 1e-9
+
+            S = R / Za
+            C = X * self.gradprop2(S, self.weight) - L * self.gradprop2(S, pw) - H * self.gradprop2(S, nw)
+            R = C
+        else:
+            beta = alpha - 1
+            pw = torch.clamp(self.weight, min=0)
+            nw = torch.clamp(self.weight, max=0)
+            px = torch.clamp(self.X, min=0)
+            nx = torch.clamp(self.X, max=0)
+
+            def f(w1, w2, x1, x2):
+                Z1 = F.conv3d(x1, w1, bias=None, stride=self.stride, padding=self.padding)
+                Z2 = F.conv3d(x2, w2, bias=None, stride=self.stride, padding=self.padding)
+                S1 = safe_divide(R, Z1)
+                S2 = safe_divide(R, Z2)
+                C1 = x1 * self.gradprop(Z1, x1, S1)[0]
+                C2 = x2 * self.gradprop(Z2, x2, S2)[0]
+                return C1 + C2
+
+            activator_relevances = f(pw, nw, px, nx)
+            inhibitor_relevances = f(nw, pw, px, nx)
+
+            R = alpha * activator_relevances - beta * inhibitor_relevances
+        return R
+    def RAP_relprop(self, R_p):
+        def shift_rel(R, R_val):
+            R_nonzero = torch.ne(R, 0).type(R.type())
+            shift = safe_divide(R_val, torch.sum(R_nonzero, dim=[1,2,3,4], keepdim=True)) * torch.ne(R, 0).type(R.type())
+            K = R - shift
+            return K
+        def pos_prop(R, Za1, Za2, x1):
+            R_pos = torch.clamp(R, min=0)
+            R_neg = torch.clamp(R, max=0)
+            S1 = safe_divide((R_pos * safe_divide((Za1 + Za2), Za1 + Za2)), Za1)
+            C1 = x1 * self.gradprop(Za1, x1, S1)[0]
+            S1n = safe_divide((R_neg * safe_divide((Za1 + Za2), Za1 + Za2)), Za2)
+            C1n = x1 * self.gradprop(Za2, x1, S1n)[0]
+            S2 = safe_divide((R_pos * safe_divide((Za2), Za1 + Za2)), Za2)
+            C2 = x1 * self.gradprop(Za2, x1, S2)[0]
+            S2n = safe_divide((R_neg * safe_divide((Za2), Za1 + Za2)), Za2)
+            C2n = x1 * self.gradprop(Za2, x1, S2n)[0]
+            Cp = C1 + C2
+            Cn = C2n + C1n
+            C = (Cp + Cn)
+            C = shift_rel(C, C.sum(dim=[1,2,3,4], keepdim=True) - R.sum(dim=[1,2,3,4], keepdim=True))
+            return C
+        def f(R, w1, w2, x1, x2):
+            R_nonzero = R.ne(0).type(R.type())
+            Za1 = F.conv3d(x1, w1, bias=None, stride=self.stride, padding=self.padding) * R_nonzero
+            Za2 = - F.conv3d(x1, w2, bias=None, stride=self.stride, padding=self.padding) * R_nonzero
+
+            Zb1 = - F.conv3d(x2, w1, bias=None, stride=self.stride, padding=self.padding) * R_nonzero
+            Zb2 = F.conv3d(x2, w2, bias=None, stride=self.stride, padding=self.padding) * R_nonzero
+
+            C1 = pos_prop(R, Za1, Za2, x1)
+            C2 = pos_prop(R, Zb1, Zb2, x2)
+            return C1 + C2
+        def backward(R_p, px, nx, pw, nw):
+
+            # if torch.is_tensor(self.bias):
+            #     bias = self.bias.unsqueeze(-1).unsqueeze(-1)
+            #     bias_p = safe_divide(bias * R_p.ne(0).type(self.bias.type()),
+            #                          R_p.ne(0).type(self.bias.type()).sum(dim=[2, 3], keepdim=True))
+            #     R_p = R_p - bias_p
+
+            Rp = f(R_p, pw, nw, px, nx)
+
+            # if torch.is_tensor(self.bias):
+            #     Bp = f(bias_p, pw, nw, px, nx)
+            #
+            #     Rp = Rp + Bp
+            return Rp
+        def final_backward(R_p, pw, nw, X1):
+            X = X1
+            L = X * 0 + \
+                torch.min(torch.min(torch.min(torch.min(X, dim=1, keepdim=True)[0], dim=2, keepdim=True)[0], dim=3,
+                          keepdim=True)[0], dim=4)[0]
+            H = X * 0 + \
+                torch.min(torch.max(torch.max(torch.max(X, dim=1, keepdim=True)[0], dim=2, keepdim=True)[0], dim=3,
+                          keepdim=True)[0], dim=4)[0]
+            Za = torch.conv3d(X, self.weight, bias=None, stride=self.stride, padding=self.padding) - \
+                 torch.conv3d(L, pw, bias=None, stride=self.stride, padding=self.padding) - \
+                 torch.conv3d(H, nw, bias=None, stride=self.stride, padding=self.padding)
+
+            Sp = safe_divide(R_p, Za)
+
+            Rp = X * self.gradprop2(Sp, self.weight) - L * self.gradprop2(Sp, pw) - H * self.gradprop2(Sp, nw)
+            return Rp
+        pw = torch.clamp(self.weight, min=0)
+        nw = torch.clamp(self.weight, max=0)
+        px = torch.clamp(self.X, min=0)
+        nx = torch.clamp(self.X, max=0)
+
+        if self.X.shape[1] == 1:
+            Rp = final_backward(R_p, pw, nw, self.X)
+        else:
+            Rp = backward(R_p, px, nx, pw, nw)
+        return Rp
 
 def conv3d(in_channels, out_channels, kernel_size, bias, padding):
     return Conv3d(in_channels, out_channels, kernel_size, padding=padding, bias=bias)
@@ -561,11 +688,11 @@ class ExtResNetBlock(nn.Module):
 
         # create non-linearity separately
         if 'l' in order:
-            self.non_linearity = nn.LeakyReLU(negative_slope=0.1, inplace=True)
+            self.non_linearity = LeakyReLU(negative_slope=0.1, inplace=True)
         elif 'e' in order:
-            self.non_linearity = nn.ELU(inplace=True)
+            self.non_linearity = ELU(inplace=True)
         else:
-            self.non_linearity = nn.ReLU(inplace=True)
+            self.non_linearity = ReLU(inplace=True)
 
     def forward(self, x):
         # apply first convolution and save the output as a residual
@@ -610,9 +737,9 @@ class Encoder(nn.Module):
         assert pool_type in ['max', 'avg']
         if apply_pooling:
             if pool_type == 'max':
-                self.pooling = nn.MaxPool3d(kernel_size=pool_kernel_size)
+                self.pooling = MaxPool3d(kernel_size=pool_kernel_size)
             else:
-                self.pooling = nn.AvgPool3d(kernel_size=pool_kernel_size)
+                self.pooling = AvgPool3d(kernel_size=pool_kernel_size)
         else:
             self.pooling = None
 
@@ -713,7 +840,7 @@ class Upsampling(nn.Module):
         if transposed_conv:
             # make sure that the output size reverses the MaxPool3d from the corresponding encoder
             # (D_out = (D_in − 1) ×  stride[0] − 2 ×  padding[0] +  kernel_size[0] +  output_padding[0])
-            self.upsample = nn.ConvTranspose3d(in_channels, out_channels, kernel_size=kernel_size, stride=scale_factor,
+            self.upsample = ConvTranspose3d(in_channels, out_channels, kernel_size=kernel_size, stride=scale_factor,
                                                padding=1)
         else:
             self.upsample = partial(self._interpolate, mode=mode)
