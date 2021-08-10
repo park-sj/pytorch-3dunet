@@ -106,9 +106,9 @@ class NpzDataset(ConfigDataset):
         self.cur_image = np.expand_dims(self.cur_image, 0)        
         if self.phase != 'test':
             self.cur_mask = data['mask']
-            if random.getrandbits(1):
-                self.cur_image.flip(axis=2)
-                self.cur_mask.flip(axis=2)
+            # if random.getrandbits(1):
+            #     self.cur_image.flip(axis=2)
+            #     self.cur_mask.flip(axis=2)
 #            if self.cur_mask.shape[0] >= 600:
 #                self.cur_mask = self.cur_mask[100:-100, :, :]
             self.cur_mask = resize(self.cur_mask.astype(np.float32), (296, 296, 296), anti_aliasing = False)
