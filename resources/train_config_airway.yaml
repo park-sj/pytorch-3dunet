@@ -3,7 +3,7 @@
 # model configuration
 model:
   # model class, e.g. UNet3D, ResidualUNet3D, NoNewReversible
-  name: NoNewReversible # NoNewReversible
+  name: ResidualUNet3D # NoNewReversible
   # number of input channels to the model
   in_channels: 1
   # number of output channels
@@ -11,11 +11,11 @@ model:
   # determines the order of operators in a single layer (gcr - GroupNorm+Conv3d+ReLU)
   layer_order: gcr
   # feature maps scale factor
-  f_maps: 4
+  f_maps: 16
   # number of groups in the groupnorm
   num_groups: 4
   # number of levels in the encoder/decoder path
-  num_levels: 4
+  num_levels: 6
   # apply element-wise nn.Sigmoid after the final 1x1 convolution, otherwise apply nn.Softmax
   final_sigmoid: true
   # if True applies the final normalization layer (sigmoid or softmax), otherwise the networks returns the output from the final convolution layer; use False for regression problems, e.g. de-noising
@@ -27,11 +27,11 @@ trainer:
   # path to latest checkpoint; if provided the training will be resumed from that checkpoint
   resume: Null
   # how many iterations between validations
-  validate_after_iters: 20
+  validate_after_iters: 10
   # how many iterations between tensorboard logging
-  log_after_iters: 20
+  log_after_iters: 10
   # max number of epochs
-  epochs: 30
+  epochs: 100
   # max number of iterations
   iters: 100000
   # model with higher eval score is considered better
@@ -63,9 +63,9 @@ eval_metric:
   input_channel: 0
 lr_scheduler:
   name: CosineAnnealingWarmUpRestarts
-  T_0: 400
+  T_0: 100
   eta_max: 0.001
-  T_up: 50
+  T_up: 20
   gamma: 0.5
 # data loaders configuration
 loaders:
@@ -74,7 +74,7 @@ loaders:
   # when reading from multiple threads.
   dataset: NpzDataset
   # batch dimension; if number of GPUs is N > 1, then a batch_size of N * batch_size will automatically be taken for DataParallel
-  batch_size: 1
+  batch_size: 4
   # how many subprocesses to use for data loading
   num_workers: 4
   # path to the raw data within the H5
@@ -93,7 +93,7 @@ loaders:
       # SliceBuilder class
       name: SliceBuilder
       # train patch size given to the network (adapt to fit in your GPU mem, generally the bigger patch the better)
-      patch_shape: [296, 296, 296]
+      patch_shape: [128, 128, 128]
       stride_shape: [120, 120, 120] # [120, 96] or [240, 180]
     # data transformations/augmentations
     transformer:
@@ -118,7 +118,7 @@ loaders:
       # SliceBuilder class
       name: SliceBuilder
       # train patch size given to the network (adapt to fit in your GPU mem, generally the bigger patch the better)
-      patch_shape: [296, 296, 296]
+      patch_shape: [128, 128, 128]
       stride_shape: [120, 120, 120] # [120, 96] or [240, 180]
     transformer:
       raw:

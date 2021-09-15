@@ -2,8 +2,8 @@
 # manual_seed: 0
 # model configuration
 model:
-  # model class, e.g. UNet3D, ResidualUNet3D
-  name: ResidualUNet3D # NoNewReversible
+  # model class, e.g. UNet3D, ResidualUNet3D, NoNewReversible
+  name: NoNewReversible # NoNewReversible
   # number of input channels to the model
   in_channels: 1
   # number of output channels
@@ -27,19 +27,19 @@ trainer:
   # path to latest checkpoint; if provided the training will be resumed from that checkpoint
   resume: Null
   # how many iterations between validations
-  validate_after_iters: 20
+  validate_after_iters: 50
   # how many iterations between tensorboard logging
-  log_after_iters: 20
+  log_after_iters: 50
   # max number of epochs
   epochs: 30
   # max number of iterations
-  iters: 100000
+  iters: 1000000
   # model with higher eval score is considered better
   eval_score_higher_is_better: True
 # optimizer configuration
 optimizer:
   # initial learning rate
-  learning_rate: 0.0002
+  learning_rate: 0.000002
   # weight decay
   weight_decay: 0.0001
 # loss function configuration
@@ -56,15 +56,17 @@ eval_metric:
   # use AdaptedRandError metric
   name: MeanIoU
   # probability maps thresholds to validate on
-  thresholds: [0.4]
+  thresholds: [0.5]
   # use the last target channel to compute the metric
   use_last_target: true
   # use only the first channel for computing the metric
   input_channel: 0
 lr_scheduler:
-  name: MultiStepLR
-  milestones: [10, 30, 60]
-  gamma: 0.2
+  name: CosineAnnealingWarmUpRestarts
+  T_0: 400
+  eta_max: 0.001
+  T_up: 50
+  gamma: 0.5
 # data loaders configuration
 loaders:
   # class of the HDF5 dataset, currently StandardHDF5Dataset and LazyHDF5Dataset are supported.
@@ -86,7 +88,7 @@ loaders:
     # absolute paths to the training datasets; if a given path is a directory all H5 files ('*.h5', '*.hdf', '*.hdf5', '*.hd5')
     # inside this this directory will be included as well (non-recursively)
     file_paths:
-      - '/home/shkim/Libraries/pytorch-3dunet/datasets/JW/'
+      - '/media/shkim/7cf97277-d9cd-454f-994f-59734f6775d0/skin_data/'
     slice_builder:
       # SliceBuilder class
       name: SliceBuilder
@@ -111,7 +113,7 @@ loaders:
     # paths to the validation datasets; if a given path is a directory all H5 files ('*.h5', '*.hdf', '*.hdf5', '*.hd5')
     # inside this this directory will be included as well (non-recursively)
     file_paths:
-      - '/home/shkim/Libraries/pytorch-3dunet/datasets/JW/'
+      - '/media/shkim/7cf97277-d9cd-454f-994f-59734f6775d0/skin_data/'
     slice_builder:
       # SliceBuilder class
       name: SliceBuilder

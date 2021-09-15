@@ -1,7 +1,9 @@
-model_path: 3dunet/best_checkpoint.pytorch
+# use a fixed random seed to guarantee that when you run the code twice you will get the same outcome
+# manual_seed: 0
+# model configuration
 model:
-  # model class, e.g. UNet3D, ResidualUNet3D
-  name: NoNewReversible # NoNewReversible
+  # model class, e.g. UNet3D, ResidualUNet3D, NoNewReversible
+  name: ResidualUNet3D # NoNewReversible
   # number of input channels to the model
   in_channels: 1
   # number of output channels
@@ -9,11 +11,11 @@ model:
   # determines the order of operators in a single layer (gcr - GroupNorm+Conv3d+ReLU)
   layer_order: gcr
   # feature maps scale factor
-  f_maps: 4
+  f_maps: 16
   # number of groups in the groupnorm
   num_groups: 4
   # number of levels in the encoder/decoder path
-  num_levels: 4
+  num_levels: 6
   # apply element-wise nn.Sigmoid after the final 1x1 convolution, otherwise apply nn.Softmax
   final_sigmoid: true
   # if True applies the final normalization layer (sigmoid or softmax), otherwise the networks returns the output from the final convolution layer; use False for regression problems, e.g. de-noising
@@ -25,11 +27,11 @@ trainer:
   # path to latest checkpoint; if provided the training will be resumed from that checkpoint
   resume: Null
   # how many iterations between validations
-  validate_after_iters: 20
+  validate_after_iters: 10
   # how many iterations between tensorboard logging
-  log_after_iters: 20
+  log_after_iters: 10
   # max number of epochs
-  epochs: 30
+  epochs: 100
   # max number of iterations
   iters: 100000
   # model with higher eval score is considered better
@@ -37,13 +39,13 @@ trainer:
 # optimizer configuration
 optimizer:
   # initial learning rate
-  learning_rate: 0.0002
+  learning_rate: 0.000002
   # weight decay
   weight_decay: 0.0001
 # loss function configuration
 loss:
   # loss function to be used during training
-  name: ActiveContourLoss
+  name: DiceLoss
   # A manual rescaling weight given to each class.
   weight: null
   lambdaP: 50.0
@@ -54,23 +56,25 @@ eval_metric:
   # use AdaptedRandError metric
   name: MeanIoU
   # probability maps thresholds to validate on
-  thresholds: [0.4]
+  thresholds: [0.5]
   # use the last target channel to compute the metric
   use_last_target: true
   # use only the first channel for computing the metric
   input_channel: 0
 lr_scheduler:
-  name: MultiStepLR
-  milestones: [10, 30, 60]
-  gamma: 0.2
+  name: CosineAnnealingWarmUpRestarts
+  T_0: 100
+  eta_max: 0.001
+  T_up: 20
+  gamma: 0.5
 # data loaders configuration
 loaders:
   # class of the HDF5 dataset, currently StandardHDF5Dataset and LazyHDF5Dataset are supported.
   # When using LazyHDF5Dataset make sure to set `num_workers = 1`, due to a bug in h5py which corrupts the data
   # when reading from multiple threads.
-  dataset: DicomDataset
+  dataset: NpzDataset
   # batch dimension; if number of GPUs is N > 1, then a batch_size of N * batch_size will automatically be taken for DataParallel
-  batch_size: 1
+  batch_size: 4
   # how many subprocesses to use for data loading
   num_workers: 4
   # path to the raw data within the H5
@@ -84,12 +88,12 @@ loaders:
     # absolute paths to the training datasets; if a given path is a directory all H5 files ('*.h5', '*.hdf', '*.hdf5', '*.hd5')
     # inside this this directory will be included as well (non-recursively)
     file_paths:
-      - '/home/shkim/Libraries/pytorch-3dunet/datasets/skin/'
+      - '/home/shkim/Libraries/pytorch-3dunet/datasets/bone/'
     slice_builder:
       # SliceBuilder class
       name: SliceBuilder
       # train patch size given to the network (adapt to fit in your GPU mem, generally the bigger patch the better)
-      patch_shape: [296, 296, 296]
+      patch_shape: [128, 128, 128]
       stride_shape: [120, 120, 120] # [120, 96] or [240, 180]
     # data transformations/augmentations
     transformer:
@@ -109,12 +113,12 @@ loaders:
     # paths to the validation datasets; if a given path is a directory all H5 files ('*.h5', '*.hdf', '*.hdf5', '*.hd5')
     # inside this this directory will be included as well (non-recursively)
     file_paths:
-      - '/home/shkim/Libraries/pytorch-3dunet/datasets/skin/'
+      - '/home/shkim/Libraries/pytorch-3dunet/datasets/bone/'
     slice_builder:
       # SliceBuilder class
       name: SliceBuilder
       # train patch size given to the network (adapt to fit in your GPU mem, generally the bigger patch the better)
-      patch_shape: [296, 296, 296]
+      patch_shape: [128, 128, 128]
       stride_shape: [120, 120, 120] # [120, 96] or [240, 180]
     transformer:
       raw:
