@@ -13,6 +13,10 @@ def safe_divide(a,b):
     return a / (b + b.eq(0).type(b.type()) * 1e-9) * b.ne(0).type(b.type())
 
 def forward_hook(self, input, output):
+    ''' Forward hook (hook으로 등록해놓으면 forward 할 때
+    실행되는 callback function 같은 개념)을 이용해서 input과
+    output을 미리 기록해둠. 이로써 forward를 먼저 실행 후
+    backward로 relevance를 계산할 수 있음'''
     if type(input[0]) in (list, tuple):
         self.X = []
         for i in input[0]:
@@ -403,15 +407,11 @@ class ConvTranspose3d(nn.ConvTranspose3d, RelProp):
     Conv3d 과정을 우선 이해해야한다.
     '''
     def gradprop2(self, DY, weight):
-        Z = self.forward(self.X)
-
-        output_padding = self.X.size()[2] - (
-                (Z.size()[2] - 1) * self.stride[0] - 2 * self.padding[0] + self.kernel_size[0])
-
-        return F.conv_transpose3d(DY, weight, stride=self.stride, padding=self.padding, output_padding=output_padding)
+        
+        return F.conv3d(DY, weight, stride=self.stride, padding=self.padding)
 
     def relprop(self, R, alpha):
-        if self.X.shape[1] == 1:
+        if self.X.shape[1] == 1: # channel == 1, final propagation
             pw = torch.clamp(self.weight, min=0)
             nw = torch.clamp(self.weight, max=0)
             X = self.X
@@ -421,9 +421,9 @@ class ConvTranspose3d(nn.ConvTranspose3d, RelProp):
             H = self.X * 0 + \
                 torch.max(torch.max(torch.max(torch.max(self.X, dim=1, keepdim=True)[0], dim=2, keepdim=True)[0], dim=3,
                           keepdim=True)[0], dim=4)[0]
-            Za = torch.conv3d(X, self.weight, bias=None, stride=self.stride, padding=self.padding) - \
-                 torch.conv3d(L, pw, bias=None, stride=self.stride, padding=self.padding) - \
-                 torch.conv3d(H, nw, bias=None, stride=self.stride, padding=self.padding) + 1e-9
+            Za = torch.conv_transpose3d(X, self.weight, bias=None, stride=self.stride, padding=self.padding) - \
+                 torch.conv_transpose3d(L, pw, bias=None, stride=self.stride, padding=self.padding) - \
+                 torch.conv_transpose3d(H, nw, bias=None, stride=self.stride, padding=self.padding) + 1e-9
 
             S = R / Za
             C = X * self.gradprop2(S, self.weight) - L * self.gradprop2(S, pw) - H * self.gradprop2(S, nw)
