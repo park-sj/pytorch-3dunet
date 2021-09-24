@@ -13,7 +13,7 @@ import os
 from random import randint
 
 ''' Configuration '''
-PATCH_PER_CT = 128
+PATCH_PER_CT = 64
 PATCH_SIZE = (128,128,128)
 
 
@@ -38,8 +38,8 @@ def prepare_dataset(root_dir, save_dir, mode):
         mask_array = _load_files(os.path.join(root_dir,mode+'_masks',p))
         
         if dicom_array.shape[0] >= 600:
-            dicom_array = dicom_array[50:-50, :, :]
-            mask_array = mask_array[50:-50, :, :]
+            dicom_array = dicom_array[100:-100, :, :]
+            mask_array = mask_array[100:-100, :, :]
         
         # dicom_array = resize(dicom_array.astype(np.float64),(296,296,296)).astype(np.float64)
         # mask_array = resize(mask_array.astype(np.float32),(296,296,296)).astype(np.int8)
