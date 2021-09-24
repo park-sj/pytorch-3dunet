@@ -3,11 +3,14 @@ from functools import partial
 import torch
 from torch import nn as nn
 from torch.nn import functional as F
-from . import buildingblocks
 
 '''
 building blocks with relavance propagation
 '''
+
+__all__ = ['forward_hook', 'Add', 'Cat', 'ReLU', 'Dropout', 'BatchNorm3d', 'MaxPool3d',
+           'AvgPool3d', 'Conv3d', 'ConvTranspose3d', 'Sequential', 'safe_divide']
+
 
 def safe_divide(a,b):
     return a / (b + b.eq(0).type(b.type()) * 1e-9) * b.ne(0).type(b.type())
@@ -117,6 +120,57 @@ class AvgPool3d(nn.AvgPool3d, RelPropSimple):
 class Add(RelPropSimple):
     def forward(self, inputs):
         return torch.add(*inputs)
+
+class Cat(RelProp):
+    def forward(self, inputs, dim):
+        self.__setattr__('dim', dim)
+        return torch.cat(inputs, dim)
+
+    def relprop(self, R, alpha):
+        Z = self.forward(self.X, self.dim)
+        S = safe_divide(R, Z)
+        C = self.gradprop(Z, self.X, S)
+
+        outputs = []
+        for x, c in zip(self.X, C):
+            outputs.append(x * c)
+
+        return outputs
+    def RAP_relprop(self, R_p):
+        def backward(R_p):
+            Z = self.forward(self.X, self.dim)
+            Sp = safe_divide(R_p, Z)
+
+            Cp = self.gradprop(Z, self.X, Sp)
+
+            Rp = []
+
+            for x, cp in zip(self.X, Cp):
+                Rp.append(x * (cp))
+
+
+            return Rp
+        if torch.is_tensor(R_p) == False:
+            idx = len(R_p)
+            tmp_R_p = R_p
+            Rp = []
+            for i in range(idx):
+                Rp_tmp = backward(tmp_R_p[i])
+                Rp.append(Rp_tmp)
+        else:
+            Rp = backward(R_p)
+        return Rp
+
+class Sequential(nn.Sequential):
+    def relprop(self, R, alpha):
+        for m in reversed(self._modules.values()):
+            R = m.relprop(R, alpha)
+        return R
+    def RAP_relprop(self, Rp):
+        for m in reversed(self._modules.values()):
+            Rp = m.RAP_relprop(Rp)
+        return Rp
+    
     
 class BatchNorm2d(nn.BatchNorm2d, RelProp):
     def relprop(self, R, alpha):
@@ -436,8 +490,8 @@ class ConvTranspose3d(nn.ConvTranspose3d, RelProp):
             nx = torch.clamp(self.X, max=0)
 
             def f(w1, w2, x1, x2):
-                Z1 = F.conv3d(x1, w1, bias=None, stride=self.stride, padding=self.padding)
-                Z2 = F.conv3d(x2, w2, bias=None, stride=self.stride, padding=self.padding)
+                Z1 = F.conv_transpose3d(x1, w1, bias=None, stride=self.stride, padding=self.padding)
+                Z2 = F.conv_transpose3d(x2, w2, bias=None, stride=self.stride, padding=self.padding)
                 S1 = safe_divide(R, Z1)
                 S2 = safe_divide(R, Z2)
                 C1 = x1 * self.gradprop(Z1, x1, S1)[0]
@@ -473,11 +527,11 @@ class ConvTranspose3d(nn.ConvTranspose3d, RelProp):
             return C
         def f(R, w1, w2, x1, x2):
             R_nonzero = R.ne(0).type(R.type())
-            Za1 = F.conv3d(x1, w1, bias=None, stride=self.stride, padding=self.padding) * R_nonzero
-            Za2 = - F.conv3d(x1, w2, bias=None, stride=self.stride, padding=self.padding) * R_nonzero
+            Za1 = F.conv_transpose3d(x1, w1, bias=None, stride=self.stride, padding=self.padding) * R_nonzero
+            Za2 = - F.conv_transpose3d(x1, w2, bias=None, stride=self.stride, padding=self.padding) * R_nonzero
 
-            Zb1 = - F.conv3d(x2, w1, bias=None, stride=self.stride, padding=self.padding) * R_nonzero
-            Zb2 = F.conv3d(x2, w2, bias=None, stride=self.stride, padding=self.padding) * R_nonzero
+            Zb1 = - F.conv_transpose3d(x2, w1, bias=None, stride=self.stride, padding=self.padding) * R_nonzero
+            Zb2 = F.conv_transpose3d(x2, w2, bias=None, stride=self.stride, padding=self.padding) * R_nonzero
 
             C1 = pos_prop(R, Za1, Za2, x1)
             C2 = pos_prop(R, Zb1, Zb2, x2)
@@ -505,9 +559,9 @@ class ConvTranspose3d(nn.ConvTranspose3d, RelProp):
             H = X * 0 + \
                 torch.min(torch.max(torch.max(torch.max(X, dim=1, keepdim=True)[0], dim=2, keepdim=True)[0], dim=3,
                           keepdim=True)[0], dim=4)[0]
-            Za = torch.conv3d(X, self.weight, bias=None, stride=self.stride, padding=self.padding) - \
-                 torch.conv3d(L, pw, bias=None, stride=self.stride, padding=self.padding) - \
-                 torch.conv3d(H, nw, bias=None, stride=self.stride, padding=self.padding)
+            Za = torch.conv_transpose3d(X, self.weight, bias=None, stride=self.stride, padding=self.padding) - \
+                 torch.conv_transpose3d(L, pw, bias=None, stride=self.stride, padding=self.padding) - \
+                 torch.conv_transpose3d(H, nw, bias=None, stride=self.stride, padding=self.padding)
 
             Sp = safe_divide(R_p, Za)
 

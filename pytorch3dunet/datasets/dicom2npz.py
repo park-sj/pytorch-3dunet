@@ -13,7 +13,7 @@ import os
 from random import randint
 
 ''' Configuration '''
-PATCH_PER_CT = 64
+PATCH_PER_CT = 128
 PATCH_SIZE = (128,128,128)
 
 
