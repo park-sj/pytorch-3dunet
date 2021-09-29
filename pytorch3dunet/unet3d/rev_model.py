@@ -25,7 +25,8 @@ import revtorch.revtorch as rv
 INPLACE = True
 
 #hyperparameters
-CHANNELS = [16, 32, 64, 128, 256] #normal doubling strategy
+# CHANNELS = [16, 32, 64, 128, 256] #normal doubling strategy
+CHANNELS = [32, 64, 128, 256, 512]
 # CHANNELS = [60, 120, 240, 360, 480]
 INITIAL_LR = 1e-4
 L2_REGULARIZER = 1e-5

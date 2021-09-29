@@ -19,7 +19,7 @@ from pytorch3dunet.unet3d.utils import get_logger
 
 logger = get_logger('SkinDataset')
 
-class SkinNpzDataset(ConfigDataset):
+class SkinDataset(ConfigDataset):
     def __init__(self, file_path, phase, slice_builder_config, transformer_config, mirror_padding=(0, 32, 32)):
         """
         :param file_path: path to dicom root directory
@@ -29,7 +29,7 @@ class SkinNpzDataset(ConfigDataset):
         :param mirror_padding (int or tuple): number of voxels padded to each axis
         """
         assert os.path.isdir(file_path), 'Incorrect dataset directory'
-        assert phase in ['train', 'val'], 'SkinNpzDataset is only for training and validating, use SkinDcmDataset for predicting'
+        assert phase in ['train', 'val', 'test']
         
         if phase in ['train', 'val']:
             mirror_padding = None
@@ -47,7 +47,7 @@ class SkinNpzDataset(ConfigDataset):
         self.patients = os.listdir(os.path.join(file_path, phase))
         self.transformer_config = transformer_config
         
-        image_sample = np.zeros((296,296,296))
+        image_sample = np.zeros((128,128,128))
         # min_value, max_value, mean, std = calculate_stats(image_sample.astype(np.float64))
         # transformer = transforms.get_transformer(transformer_config, min_value=min_value, max_value=max_value,
         #                                          mean=mean, std=std)
