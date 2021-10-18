@@ -19,7 +19,7 @@ from pytorch3dunet.unet3d.utils import get_logger
 
 logger = get_logger('SkinDataset')
 
-class SkinDataset(ConfigDataset):
+class SkinNpzDataset(ConfigDataset):
     def __init__(self, file_path, phase, slice_builder_config, transformer_config, mirror_padding=(0, 32, 32)):
         """
         :param file_path: path to dicom root directory
@@ -129,8 +129,8 @@ class SkinDataset(ConfigDataset):
             mask = self.label_slices[idx]
             # mask = np.expand_dims(mask, 0)
             mask = self._transform_patches(self.cur_mask, mask, self.masks_transform)
-            # if self.phase == 'train':
-            #     image += np.random.normal(0,0.2, image.shape).astype(np.float32) # Gaussian noise
+            if self.phase == 'train':
+                image += np.random.normal(0,0.2, image.shape).astype(np.float32) # Gaussian noise
                 # noise = generate_perlin_noise_3d((296,296,296), (8,8,8))*0.5
                 # noise[noise<0] = 0
                 # image += noise # Perlin noise
@@ -204,6 +204,7 @@ class SkinDcmDataset(ConfigDataset):
         self.weight_maps = None
         
         self.count = -1
+        self.getImage(0)
     
     def getImage(self, count):
         if count >= len(self.patients):
@@ -216,8 +217,9 @@ class SkinDcmDataset(ConfigDataset):
         patch_shape = self.slice_builder_config['patch_shape']
         stride_shape = self.slice_builder_config['stride_shape']
         input_shape = self.cur_image.shape
+        self.input_shape = input_shape
         target_size = list(input_shape)
-        for i in len(input_shape):
+        for i in range(len(input_shape)):
             if input_shape[i] < patch_shape[i]:
                 target_size[i] = patch_shape[i]
             else:
@@ -226,8 +228,9 @@ class SkinDcmDataset(ConfigDataset):
         padding_shape = ((math.ceil((target_size[0]-input_shape[0])/2), (math.floor((target_size[0]-input_shape[0])/2))),
                          (math.ceil((target_size[1]-input_shape[1])/2), (math.floor((target_size[1]-input_shape[1])/2))),
                          (math.ceil((target_size[2]-input_shape[2])/2), (math.floor((target_size[2]-input_shape[2])/2))))
-        np.pad(self.cur_image, padding_shape, mode="constant", constant_values=-750)
-        
+        self.target_size = target_size
+        self.cur_image = np.pad(self.cur_image, padding_shape, mode="constant", constant_values=-750)
+        self.cur_image = np.expand_dims(self.cur_image, 0)  
         
         slice_builder = get_slice_builder(self.cur_image, None, self.weight_maps, self.slice_builder_config)
         
@@ -242,7 +245,7 @@ class SkinDcmDataset(ConfigDataset):
         transformer = transforms.get_transformer(self.transformer_config, min_value=self.min_value, max_value=self.max_value,
                                                  mean=mean, std=std)
         self.raw_transform = transformer.raw_transform()
-        self.cur_image = np.expand_dims(self.cur_image, 0)        
+              
         self.image_slices = slice_builder.raw_slices
         self.patch_per_image = len(self.image_slices)
 
@@ -255,8 +258,8 @@ class SkinDcmDataset(ConfigDataset):
         
         # self.getImage(int(idx % len(self.patients)))
         # logger.info(f'getting item number {idx}')
-        self.getImage(int(idx / self.patch_per_image))
-        name = self.patients[int(idx / self.patch_per_image)]
+        
+        # name = self.patients[int(idx / self.patch_per_image)]
         
         idx = idx % self.patch_per_image
         image = self.image_slices[idx]

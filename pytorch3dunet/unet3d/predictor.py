@@ -352,8 +352,9 @@ class SkinPredictor(_AbstractPredictor):
 
         # dimensionality of the the output predictions
         # volume_shape = self._volume_shape(self.loader.dataset)
-        x, _ = self.loader.dataset[0]
-        volume_shape = (x.shape)[1:]
+        volume_shape = tuple(self.loader.dataset.target_size)
+        # volume_shape = (696,800,800)
+        # volume_shape = (728, 828, 828)
 
         if prediction_channel is None:
             prediction_maps_shape = (out_channels,) + volume_shape
@@ -363,7 +364,7 @@ class SkinPredictor(_AbstractPredictor):
 
         logger.info(f'The shape of the output prediction maps (CDHW): {prediction_maps_shape}')
 
-        patch_halo = self.predictor_config.get('patch_halo', (16, 16, 16))
+        patch_halo = self.predictor_config.get('patch_halo', (0, 0, 0))
         self._validate_halo(patch_halo, self.config['loaders']['test']['slice_builder'])
         logger.info(f'Using patch_halo: {patch_halo}')
 
@@ -385,16 +386,13 @@ class SkinPredictor(_AbstractPredictor):
             for batch, indices in self.loader:
                 # indices = (indices,)
                 # send batch to device
+                # print(torch.max(batch), torch.min(batch), torch.mean(batch))
                 batch = batch.to(device)
 
                 # forward pass
                 # batch = torch.unsqueeze(batch, 0)
                 predictions = self.model(batch)
-
-                # x = predictions.clone().cpu()
-                # np.save('/home/shkim/Libraries/pytorch-3dunet/datasets/JW/prediction' + str(indices[0]),
-                #         x.numpy())
-                # logger.info(f'Prediciton for {indices[0]} saved as {"datasets/JW/prediction" + str(indices[0])}')
+                
                 # wrap predictions into a list if there is only one output head from the network
                 if output_heads == 1:
                     predictions = [predictions]
@@ -424,14 +422,20 @@ class SkinPredictor(_AbstractPredictor):
                         logger.info(f'Saving predictions for slice:{index}...')
 
                         # remove halo in order to avoid block artifacts in the output probability maps
-                        u_prediction, u_index = remove_halo(pred, index, volume_shape, patch_halo)
+                        # u_prediction, u_index = remove_halo(pred, index, volume_shape, patch_halo)
+                        # print(np.max(pred), np.min(pred), np.mean(pred))
+                        u_prediction = pred
+                        u_index = index
+                        # print(prediction_map.shape, u_prediction.shape, u_index)
                         # accumulate probabilities into the output prediction array
                         prediction_map[u_index] += u_prediction
                         # count voxel visits for normalization
                         normalization_mask[u_index] += 1
 
         # save results to
-                    self._save_results(prediction_maps, normalization_masks, output_heads, np_output_file, self.loader.dataset)
+        # print(np.max(prediction_maps), np.min(prediction_maps))
+        self._save_results(prediction_maps, normalization_masks, output_heads, np_output_file, self.loader.dataset)
+        
         # close the output H5 file
         # h5_output_file.close()
 
@@ -444,7 +448,9 @@ class SkinPredictor(_AbstractPredictor):
 
     def _save_results(self, prediction_maps, normalization_masks, output_heads, output_file, dataset):
         def _slice_from_pad(pad):
-            if pad == 0:
+            if isinstance(pad, tuple):
+                return slice(pad[0], -pad[1])
+            elif pad == 0:
                 return slice(None, None)
             else:
                 return slice(pad, -pad)
@@ -454,18 +460,37 @@ class SkinPredictor(_AbstractPredictor):
         for prediction_map, normalization_mask, prediction_dataset in zip(prediction_maps, normalization_masks,
                                                                           prediction_datasets):
             prediction_map = prediction_map / normalization_mask
+            # print(np.max(prediction_map), np.min(prediction_map), np.mean(prediction_map), prediction_map.shape)
+            
+            import math
+            slice_builder_config = self.config['loaders']['test']['slice_builder']
+            patch_shape = slice_builder_config['patch_shape']
+            stride_shape = slice_builder_config['stride_shape']
+            input_shape = self.loader.dataset.input_shape
+            target_size = list(input_shape)
+            for i in range(len(input_shape)):
+                if input_shape[i] < patch_shape[i]:
+                    target_size[i] = patch_shape[i]
+                else:
+                    n = math.ceil((input_shape[i]-patch_shape[i])/stride_shape[i])
+                    target_size[i] = patch_shape[i] + n*stride_shape[i]
+            padding_shape = ((math.ceil((target_size[0]-input_shape[0])/2), (math.floor((target_size[0]-input_shape[0])/2))),
+                             (math.ceil((target_size[1]-input_shape[1])/2), (math.floor((target_size[1]-input_shape[1])/2))),
+                             (math.ceil((target_size[2]-input_shape[2])/2), (math.floor((target_size[2]-input_shape[2])/2))))
+            
+            z_s, y_s, x_s = [_slice_from_pad(p) for p in padding_shape]
+            print(padding_shape, z_s, y_s, x_s)
+            logger.info(f'Dataset loaded with mirror padding: {dataset.mirror_padding}. Cropping before saving...')
 
-            if dataset.mirror_padding is not None:
-                z_s, y_s, x_s = [_slice_from_pad(p) for p in dataset.mirror_padding]
-
-                logger.info(f'Dataset loaded with mirror padding: {dataset.mirror_padding}. Cropping before saving...')
-
-                prediction_map = prediction_map[:, z_s, y_s, x_s]
+            prediction_map = prediction_map[:, z_s, y_s, x_s]
+            print(prediction_map.shape)
 
             logger.info(f'Saving predictions to: {self.output_file}/{prediction_dataset}...')
             # output_file.create_dataset(prediction_dataset, data=prediction_map, compression="gzip")
         # np.save('/home/shkim/Libraries/pytorch-3dunet/prediction/'+prediction_dataset, prediction_map)
         patient = os.listdir(os.path.join(os.getcwd(), 'io', 'test'))
+        print(np.max(prediction_map), np.min(prediction_map), prediction_map.shape)
+        
         self._save_dicom(prediction_map, os.path.join(os.getcwd(), 'io', 'save', patient[self.it]))
         self.it += 1
 
@@ -498,11 +523,12 @@ class SkinPredictor(_AbstractPredictor):
         logger.info("The template is loaded.")
         newArray = np.squeeze(newArray)
         # newArray = scipy.ndimage.zoom(newArray, 2, order = 0)
-        newArray = skimage.transform.resize(newArray, imgShape, anti_aliasing=False)
+        # newArray = skimage.transform.resize(newArray, imgShape, anti_aliasing=False)
         # newArray = skimage.transform.rescale(newArray, 2, anti_aliasing = False)
         # newArray = skimage.transform.resize(newArray, (newArray.shape[0]*2, newArray.shape[1]*2, newArray.shape[2]*2), anti_aliasing=False)
         newArray[newArray > 0.5] = 1
         newArray[newArray <= 0.5] = 0
+        print(np.max(newArray), np.min(newArray))
         # newArray *= 1000
         # for _ in range(10):
         #     newArray = scipy.ndimage.binary_erosion(scipy.ndimage.binary_dilation(newArray))
