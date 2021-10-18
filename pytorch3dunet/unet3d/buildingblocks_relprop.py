@@ -9,7 +9,7 @@ building blocks with relavance propagation
 '''
 
 __all__ = ['forward_hook', 'Add', 'Cat', 'ReLU', 'Dropout', 'BatchNorm3d', 'MaxPool3d',
-           'AvgPool3d', 'Conv3d', 'ConvTranspose3d', 'Sequential', 'safe_divide']
+           'AvgPool3d', 'Conv3d', 'ConvTranspose3d', 'Sequential', 'safe_divide', 'Upsampling']
 
 
 def safe_divide(a,b):
@@ -868,7 +868,7 @@ class Decoder(nn.Module):
             return encoder_features + x
 
 
-class Upsampling(nn.Module):
+class Upsampling(nn.Module, RelProp):
     """
     Upsamples a given multi-channel 3D data using either interpolation or learned transposed convolution.
 
@@ -900,8 +900,22 @@ class Upsampling(nn.Module):
             self.upsample = partial(self._interpolate, mode=mode)
 
     def forward(self, encoder_features, x):
+        self.__setattr__('encoder_features', encoder_features)
         output_size = encoder_features.size()[2:]
         return self.upsample(x, output_size)
+    
+    def relprop(self, R, alpha):
+        Z = self.forward(self.encoder_features, self.X)
+        S = safe_divide(R, Z)
+        C = self.gradprop(Z, self.X, S)[0]
+        
+        if torch.is_tensor(self.X) == False:
+            outputs = []
+            outputs.append(self.X[0] * C)
+            outputs.append(self.X[1] * C)
+        else:
+            outputs = self.X * (C)
+        return outputs
 
     @staticmethod
     def _interpolate(x, size, mode):
