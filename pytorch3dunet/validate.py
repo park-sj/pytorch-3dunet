@@ -4,6 +4,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.optim.lr_scheduler import ReduceLROnPlateau
+from pytorch3dunet.unet3d.scheduler import CosineAnnealingWarmUpRestarts
 
 from pytorch3dunet.datasets.utils import get_val_loaders
 from pytorch3dunet.unet3d.config import load_config
@@ -74,11 +75,14 @@ def _create_lr_scheduler(config, optimizer):
         return ReduceLROnPlateau(optimizer, mode='max', factor=0.5, patience=20, verbose=True)
     else:
         class_name = lr_config.pop('name')
-        m = importlib.import_module('torch.optim.lr_scheduler')
-        clazz = getattr(m, class_name)
-        # atrainingdd optimizer to the config
         lr_config['optimizer'] = optimizer
-        return clazz(**lr_config)
+        modules = ['torch.optim.lr_scheduler', 'pytorch3dunet.unet3d.scheduler']
+        for module in modules:
+            m = importlib.import_module(module)
+            clazz = getattr(m, class_name, None)
+            if clazz is not None:
+                return clazz(**lr_config)
+        raise RuntimeError(f'Unsupported lr_scheduler class: {class_name}')
 
 
 def main():
