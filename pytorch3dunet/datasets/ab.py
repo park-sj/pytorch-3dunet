@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Thu Jun 18 11:53:30 2020
+2021.10.18
 
 @author: Junwon Son
 
-Load .dcm dataset
+This dataset is for predicting airway or bone
+Use npz dataset for training
 """
 
 import os
@@ -88,7 +89,7 @@ class ABDataset(ConfigDataset):
         
         # min_value, max_value, mean, std = calculate_stats(self.cur_image.astype(np.float32))
         self.min_value = -750
-        self.max_value = 1250
+        self.max_value = 1500
         self.cur_image[self.cur_image>self.max_value] = self.max_value
         self.cur_image[self.cur_image<self.min_value] = self.min_value
         mean = (self.min_value + self.max_value)/2
