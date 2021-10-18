@@ -1059,30 +1059,6 @@ class ABPredictor(_AbstractPredictor):
 
         logger.info(f'Running prediction on {len(self.loader)} batches...')
 
-        # dimensionality of the the output predictions
-        # volume_shape = self._volume_shape(self.loader.dataset)
-        x, _ = self.loader.dataset[0]
-        volume_shape = (x.shape)[1:]
-
-        if prediction_channel is None:
-            prediction_maps_shape = (out_channels,) + volume_shape
-        else:
-            # single channel prediction map
-            prediction_maps_shape = (1,) + volume_shape
-
-        logger.info(f'The shape of the output prediction maps (CDHW): {prediction_maps_shape}')
-
-        patch_halo = self.predictor_config.get('patch_halo', (16, 16, 16))
-        self._validate_halo(patch_halo, self.config['loaders']['test']['slice_builder'])
-        logger.info(f'Using patch_halo: {patch_halo}')
-
-        # create destination H5 file
-        # h5_output_file = h5py.File(self.output_file, 'w')
-        np_output_file = np.zeros(volume_shape)
-        # allocate prediction and normalization arrays
-        logger.info('Allocating prediction and normalization arrays...')
-        prediction_maps, normalization_masks = self._allocate_prediction_maps(prediction_maps_shape,
-                                                                              output_heads, np_output_file)
 
         # Sets the module in evaluation mode explicitly (necessary for batchnorm/dropout layers if present)
         self.model.eval()
@@ -1093,22 +1069,43 @@ class ABPredictor(_AbstractPredictor):
             # for batch, indices in self.loader:
             for batch, indices in self.loader:
                 
-                if batch.shape[0] != 0:
-                    raise NotImplementedError("Run on single data")
+                if batch.shape[0] != 1:
+                    raise NotImplementedError("Currently support running only on single data")
                 
+                logger.info(f'Image shpae is {batch.shape}')
                 crop = input('Enter crop range in order with blank (X min, X max, Y min, Y max, Z min, Z max) :')
                 # x_min, x_max, y_min, y_max, z_min, z_max = map(int, crop.split(' '))
                 crop = list(map(int, crop.split(' ')))
                 
-                assert crop[1] <= batch.shape[1] and \
-                        crop[3] <= batch.shape[2] and \
-                        crop[5] > batch.shape[3], 'Entered crop range is out of image size'
+                assert crop[1] <= batch.shape[2] and \
+                        crop[3] <= batch.shape[3] and \
+                        crop[5] <= batch.shape[4], 'Entered crop range is out of image size'
                 
-                batch = batch[:,crop[0]:crop[1], crop[2]:crop[3], crop[4]:crop[5]]
+                batch = batch[:,:,crop[0]:crop[1], crop[2]:crop[3], crop[4]:crop[5]]
 
-                    
-                # indices = (indices,)
+                volume_shape = (batch.shape)[1:]
+        
+                if prediction_channel is None:
+                    prediction_maps_shape = (out_channels,) + volume_shape
+                else:
+                    # single channel prediction map
+                    prediction_maps_shape = (1,) + volume_shape
+        
+                logger.info(f'The shape of the output prediction maps (CDHW): {prediction_maps_shape}')
+        
+                patch_halo = self.predictor_config.get('patch_halo', (0, 0, 0))
+                self._validate_halo(patch_halo, self.config['loaders']['test']['slice_builder'])
+                logger.info(f'Using patch_halo: {patch_halo}')
+        
+                # create destination H5 file
+                # h5_output_file = h5py.File(self.output_file, 'w')
+                np_output_file = np.zeros(volume_shape)
+                # allocate prediction and normalization arrays
+                logger.info('Allocating prediction and normalization arrays...')
+                prediction_maps, normalization_masks = self._allocate_prediction_maps(prediction_maps_shape,
+                                                                                      output_heads, np_output_file)
                 # send batch to device
+                batch = torch.nn.functional.interpolate(batch, (128,128,128))
                 batch = batch.to(device)
 
                 # forward pass
