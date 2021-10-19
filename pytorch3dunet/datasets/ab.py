@@ -15,7 +15,7 @@ import glob
 import SimpleITK as sitk
 
 import pytorch3dunet.augment.transforms as transforms
-from pytorch3dunet.datasets.utils import ConfigDataset
+from pytorch3dunet.datasets.utils import get_slice_builder, ConfigDataset
 from pytorch3dunet.unet3d.utils import get_logger
 
 logger = get_logger('DicomDataset')
@@ -48,7 +48,6 @@ class ABDataset(ConfigDataset):
         self.patients = os.listdir(os.path.join(file_path, phase))
         self.transformer_config = transformer_config
 
-        self.count = -1
     
     def getImage(self, count):
         if count >= len(self.patients):
@@ -56,6 +55,10 @@ class ABDataset(ConfigDataset):
         if self.phase == 'test':
             logger.info(f'Loading dcm files from {os.path.join(self.file_path, self.phase, self.patients[count])}')
         self.cur_image = self._load_files(os.path.join(self.file_path, self.phase, self.patients[count]))
+        
+        self.slice_builder_config['patch_shape'] = list(self.cur_image.shape)
+        slice_builder = get_slice_builder(np.expand_dims(self.cur_image, 0), None, None, self.slice_builder_config)
+        self.image_slices = slice_builder.raw_slices
         
         # min_value, max_value, mean, std = calculate_stats(self.cur_image.astype(np.float32))
         self.min_value = -750
@@ -77,18 +80,36 @@ class ABDataset(ConfigDataset):
             self.cur_mask = None
         
     def __getitem__(self, idx):
-        self.getImage(idx)
-        name = self.patients[idx]
-        image = self.raw_transform(self.cur_image)
+        self.getImage(idx) 
+        image = self.image_slices[idx]
+        image = self._transform_patches(self.cur_image, image, self.raw_transform)
+
         
         if self.phase != 'test':
             mask = self.masks_transform(self.cur_mask)
-            return image, mask, name
+            return image, mask
         else:
-            return image, name
+            raw_idx = self.image_slices[idx]
+            if len(raw_idx) == 4:
+                raw_idx = raw_idx[1:]
+            return image, raw_idx
         
     def __len__(self):
         return len(self.patients)
+
+    @staticmethod
+    def _transform_patches(datasets, label_idx, transformer):
+        transformed_patches = []
+        for dataset in datasets:
+            # get the label data and apply the label transformer
+            transformed_patch = transformer(dataset[label_idx])
+            transformed_patches.append(transformed_patch)
+
+        # if transformed_patches is a singleton list return the first element only
+        if len(transformed_patches) == 1:
+            return transformed_patches[0]
+        else:
+            return transformed_patches
         
     @classmethod
     def create_datasets(cls, dataset_config, phase):

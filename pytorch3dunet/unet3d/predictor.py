@@ -1066,12 +1066,12 @@ class ABPredictor(_AbstractPredictor):
         # Run predictions on the entire input dataset
         with torch.no_grad():
             # for batch, indices in self.loader:
-            for batch, name in self.loader:
-                
+            for batch, indices in self.loader:
+                name = os.listdir(os.path.join(self.config['loaders']['test']['file_paths'][0],'test'))[0]
                 if batch.shape[0] != 1:
                     raise NotImplementedError("Currently support running only on single data")
                 
-                logger.info(f'Image shpae is {batch.shape}')
+                logger.info(f'Image shpae is {batch.shape[2:]}')
                 crop = input('Enter crop range in order with blank (X min, X max, Y min, Y max, Z min, Z max) :')
                 # x_min, x_max, y_min, y_max, z_min, z_max = map(int, crop.split(' '))
                 crop = list(map(int, crop.split(' ')))
@@ -1095,22 +1095,23 @@ class ABPredictor(_AbstractPredictor):
                 
                 # save results to
                 output_dir = self.config['loaders']['output_dir']
-                self._save_dicom(prediction, os.path.join(output_dir, name), crop)
+                self._save_dicom(prediction, 
+                                 os.path.join(self.config['loaders']['test']['file_paths'][0],'test',name),
+                                 os.path.join(output_dir, name), crop)
 
     @staticmethod
-    def _save_dicom(newArray, filepath, crop):
+    def _save_dicom(newArray, template_dir, filepath, crop):
         def _load_template():
             patient = filepath.split('/')[-1]
-            dir = os.path.join(os.getcwd(), 'io', 'test', patient)
             # dir = '/home/shkim/SpyderProjects/0611/'
             # dir = '/home/shkim/Libraries/pytorch-3dunet/datasets/JW/test/'
             # dir = '/home/shkim/Libraries/pytorch-3dunet/datasets/H/test/'
             # patient = os.listdir(dir)
             # dir = os.path.join(dir, patient[0])
-            logger.info("The template DCM directory is " + dir)
-            assert os.path.isdir(dir), 'Cannot find the template directory'
+            logger.info("The template DCM directory is " + template_dir)
+            assert os.path.isdir(template_dir), 'Cannot find the template directory'
             reader = sitk.ImageSeriesReader()
-            dicomFiles = reader.GetGDCMSeriesFileNames(dir)
+            dicomFiles = reader.GetGDCMSeriesFileNames(template_dir)
             reader.SetFileNames(dicomFiles)
             reader.MetaDataDictionaryArrayUpdateOn()
             reader.LoadPrivateTagsOn()
