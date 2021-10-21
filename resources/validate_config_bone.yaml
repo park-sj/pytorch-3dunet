@@ -1,8 +1,6 @@
-# use a fixed random seed to guarantee that when you run the code twice you will get the same outcome
-# manual_seed: 0
-# model configuration
+model_path: 3dunet/best_checkpoint.pytorch
 model:
-  # model class, e.g. UNet3D, ResidualUNet3D, NoNewReversible
+  # model class, e.g. UNet3D, ResidualUNet3D
   name: ResidualUNet3D # NoNewReversible
   # number of input channels to the model
   in_channels: 1
@@ -27,19 +25,19 @@ trainer:
   # path to latest checkpoint; if provided the training will be resumed from that checkpoint
   resume: Null
   # how many iterations between validations
-  validate_after_iters: 10
+  validate_after_iters: 20
   # how many iterations between tensorboard logging
   log_after_iters: 10
   # max number of epochs
-  epochs: 100
+  epochs: 30
   # max number of iterations
-  iters: 1000 # 100000
+  iters: 100000
   # model with higher eval score is considered better
   eval_score_higher_is_better: True
 # optimizer configuration
 optimizer:
   # initial learning rate
-  learning_rate: 0.000002
+  learning_rate: 0.0002
   # weight decay
   weight_decay: 0.0001
 # loss function configuration

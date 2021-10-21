@@ -63,10 +63,10 @@ eval_metric:
   input_channel: 0
 lr_scheduler:
   name: CosineAnnealingWarmUpRestarts
-  T_0: 300
+  T_0: 200
   eta_max: 0.001
   T_up: 20
-  gamma: 0.8
+  gamma: 0.9
 # data loaders configuration
 loaders:
   # class of the HDF5 dataset, currently StandardHDF5Dataset and LazyHDF5Dataset are supported.

@@ -61,8 +61,8 @@ class ABDataset(ConfigDataset):
         self.image_slices = slice_builder.raw_slices
         
         # min_value, max_value, mean, std = calculate_stats(self.cur_image.astype(np.float32))
-        self.min_value = -750
-        self.max_value = 1500
+        self.min_value = -500
+        self.max_value = 2000
         self.cur_image[self.cur_image>self.max_value] = self.max_value
         self.cur_image[self.cur_image<self.min_value] = self.min_value
         mean = (self.min_value + self.max_value)/2
