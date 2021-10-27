@@ -247,8 +247,8 @@ class StandardPredictor(_AbstractPredictor):
         # paddedArray = paddedArray.transpose((1,2,0))
         # assert paddedArray.shape == (600,)*3, 'You idiot messed up with output dimension. Check unet3d/predictor.py --p.'
         newImage = sitk.GetImageFromArray(paddedArray)
-
-        newImage.CopyInformation(oldImage)
+        newImage = sitk.Cast(newImage, sitk.sitkInt8)
+        # newImage.CopyInformation(oldImage)
         writer = sitk.ImageFileWriter()
         writer.KeepOriginalImageUIDOn()
         sp_x, sp_y = reader.GetMetaData(0, "0028|0030").split('\\')
@@ -268,9 +268,9 @@ class StandardPredictor(_AbstractPredictor):
                              ("0008|0021", modification_date),
                              ("0028|0010", "296"),
                              ("0028|0011", "296"),
-                             ("0028|0100", "16"),
-                             ("0028|0101", "16"),
-                             ("0028|0102", "15"),
+                             ("0028|0100", "8"),
+                             ("0028|0101", "8"),
+                             ("0028|0102", "7"),
                              ("0028|0103", "1"),
                              ("0028|0002", "1"),
                              ("0008|0008", "DERIVED\\SECONDARY"),
@@ -296,7 +296,7 @@ class StandardPredictor(_AbstractPredictor):
                 image_slice.SetMetaData(tag, value)
             image_slice.SetMetaData("0008|0012", time.strftime("%Y%m%d"))
             image_slice.SetMetaData("0008|0013", time.strftime("%H%M%S"))
-            image_slice.SetMetaData('0020|0032', '\\'.join(map(str, [0, 0, i*sp_z])))
+            image_slice.SetMetaData('0020|0032', reader.GetMetaData(i, "0020|0032"))
             image_slice.SetMetaData("0020|0013", str(i))
             image_slice.SetMetaData('0028|0030', '\\'.join(map(str, [sp_x, sp_y])))
             image_slice.SetSpacing([sp_x, sp_y])
@@ -541,8 +541,8 @@ class SkinPredictor(_AbstractPredictor):
         # paddedArray = paddedArray.transpose((1,2,0))
         # assert paddedArray.shape == (600,)*3, 'You idiot messed up with output dimension. Check unet3d/predictor.py --p.'
         newImage = sitk.GetImageFromArray(paddedArray)
-
-        newImage.CopyInformation(oldImage)
+        newImage = sitk.Cast(newImage, sitk.sitkInt8)
+        # newImage.CopyInformation(oldImage)
         writer = sitk.ImageFileWriter()
         writer.KeepOriginalImageUIDOn()
         sp_x, sp_y = reader.GetMetaData(0, "0028|0030").split('\\')
@@ -562,9 +562,9 @@ class SkinPredictor(_AbstractPredictor):
                              ("0008|0021", modification_date),
                              ("0028|0010", "296"),
                              ("0028|0011", "296"),
-                             ("0028|0100", "16"),
-                             ("0028|0101", "16"),
-                             ("0028|0102", "15"),
+                             ("0028|0100", "8"),
+                             ("0028|0101", "8"),
+                             ("0028|0102", "7"),
                              ("0028|0103", "1"),
                              ("0028|0002", "1"),
                              ("0008|0008", "DERIVED\\SECONDARY"),
@@ -590,7 +590,7 @@ class SkinPredictor(_AbstractPredictor):
                 image_slice.SetMetaData(tag, value)
             image_slice.SetMetaData("0008|0012", time.strftime("%Y%m%d"))
             image_slice.SetMetaData("0008|0013", time.strftime("%H%M%S"))
-            image_slice.SetMetaData('0020|0032', '\\'.join(map(str, [0, 0, i*sp_z])))
+            image_slice.SetMetaData('0020|0032', reader.GetMetaData(i, "0020|0032"))
             image_slice.SetMetaData("0020|0013", str(i))
             image_slice.SetMetaData('0028|0030', '\\'.join(map(str, [sp_x, sp_y])))
             image_slice.SetSpacing([sp_x, sp_y])
@@ -1182,7 +1182,7 @@ class ABPredictor(_AbstractPredictor):
                 image_slice.SetMetaData(tag, value)
             image_slice.SetMetaData("0008|0012", time.strftime("%Y%m%d"))
             image_slice.SetMetaData("0008|0013", time.strftime("%H%M%S"))
-            image_slice.SetMetaData('0020|0032', '\\'.join(map(str, [0, 0, i*sp_z])))
+            image_slice.SetMetaData('0020|0032', reader.GetMetaData(i, "0020|0032"))
             image_slice.SetMetaData("0020|0013", str(i))
             image_slice.SetMetaData('0028|0030', '\\'.join(map(str, [sp_x, sp_y])))
             image_slice.SetSpacing([sp_x, sp_y])
