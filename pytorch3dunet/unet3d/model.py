@@ -393,7 +393,7 @@ class UNet2D(Abstract3DUNet):
 
 def get_model(config):
     def _model_class(class_name):
-        modules = ['pytorch3dunet.unet3d.model', 'pytorch3dunet.unet3d.rev_model']
+        modules = ['pytorch3dunet.unet3d.model', 'pytorch3dunet.unet3d.rev_model', 'pytorch3dunet.unet3d.unetr_model']
         for module in modules:
             m = importlib.import_module(module)
             clazz = getattr(m, class_name, None)
