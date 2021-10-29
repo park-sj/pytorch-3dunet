@@ -26,7 +26,7 @@ INPLACE = True
 
 #hyperparameters
 # CHANNELS = [16, 32, 64, 128, 256] #normal doubling strategy
-CHANNELS = [32, 64, 128, 256, 512]
+# CHANNELS = [32, 64, 128, 256, 512]
 # CHANNELS = [60, 120, 240, 360, 480]
 INITIAL_LR = 1e-4
 L2_REGULARIZER = 1e-5
@@ -92,9 +92,11 @@ class DecoderModule(nn.Module):
         return x
 
 class NoNewReversible(nn.Module):
-    def __init__(self, in_channels, out_channels, final_sigmoid=True, f_maps=64, layer_order='gcr',
+    def __init__(self, in_channels, out_channels, final_sigmoid=True, f_maps=64, channels = [32, 64, 128, 256, 512], layer_order='gcr',
                  num_groups=8, num_levels=5, is_segmentation=True, conv_padding=1, **kwargs):
         super(NoNewReversible, self).__init__()
+        global CHANNELS
+        CHANNELS = channels
         depth = 1
         self.levels = num_levels
         self.final_sigmoid = final_sigmoid

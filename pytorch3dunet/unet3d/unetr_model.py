@@ -229,8 +229,8 @@ class UNETR(nn.Module):
         # U-Net Decoder
         self.decoder0 = \
             nn.Sequential(
-                Conv3DBlock(input_dim, 32, 3),
-                Conv3DBlock(32, 64, 3)
+                Conv3DBlock(input_dim, 32),
+                Conv3DBlock(32, 64)
             )
 
         self.decoder3 = \
