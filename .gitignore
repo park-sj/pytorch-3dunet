@@ -2,7 +2,9 @@
 .pytest_cache
 .ipynb_checkpoints
 
-/bioimage-io/**/pytorch3dunet
+bioimage-io/
+
+tests/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -18,3 +20,4 @@ logs/
 # Python packages
 pytorch3dunet.egg-info/
 dist/
+build/
