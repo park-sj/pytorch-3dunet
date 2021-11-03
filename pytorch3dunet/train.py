@@ -34,7 +34,8 @@ def _create_trainer(config, model, optimizer, lr_scheduler, loss_criterion, eval
         # continue training from a given checkpoint
         return UNet3DTrainer.from_checkpoint(resume, model,
                                              optimizer, lr_scheduler, loss_criterion,
-                                             eval_criterion, loaders, tensorboard_formatter=tensorboard_formatter)
+                                             eval_criterion, loaders, tensorboard_formatter=tensorboard_formatter,
+                                             accumulation_iters=accumulation_iters)
     elif pre_trained is not None:
         # fine-tune a given pre-trained model
         return UNet3DTrainer.from_pretrained(pre_trained, model, optimizer, lr_scheduler, loss_criterion,
@@ -45,7 +46,8 @@ def _create_trainer(config, model, optimizer, lr_scheduler, loss_criterion, eval
                                              log_after_iters=trainer_config['log_after_iters'],
                                              eval_score_higher_is_better=trainer_config['eval_score_higher_is_better'],
                                              tensorboard_formatter=tensorboard_formatter,
-                                             skip_train_validation=skip_train_validation)
+                                             skip_train_validation=skip_train_validation,
+                                             accumulation_iters=accumulation_iters)
     else:
         # start training from scratch
         return UNet3DTrainer(model, optimizer, lr_scheduler, loss_criterion, eval_criterion,
@@ -56,7 +58,8 @@ def _create_trainer(config, model, optimizer, lr_scheduler, loss_criterion, eval
                              log_after_iters=trainer_config['log_after_iters'],
                              eval_score_higher_is_better=trainer_config['eval_score_higher_is_better'],
                              tensorboard_formatter=tensorboard_formatter,
-                             skip_train_validation=skip_train_validation)
+                             skip_train_validation=skip_train_validation,
+                             accumulation_iters=accumulation_iters)
 
 
 def _create_optimizer(config, model):
