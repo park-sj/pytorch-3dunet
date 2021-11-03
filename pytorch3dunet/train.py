@@ -25,6 +25,7 @@ def _create_trainer(config, model, optimizer, lr_scheduler, loss_criterion, eval
     resume = trainer_config.get('resume', None)
     pre_trained = trainer_config.get('pre_trained', None)
     skip_train_validation = trainer_config.get('skip_train_validation', False)
+    accumulation_iters = trainer_config.get('accumulation_iters', 1)
 
     # get tensorboard formatter
     tensorboard_formatter = get_tensorboard_formatter(trainer_config.get('tensorboard_formatter', None))

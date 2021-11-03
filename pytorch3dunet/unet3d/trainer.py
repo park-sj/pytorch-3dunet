@@ -50,7 +50,8 @@ class UNet3DTrainer:
                  validate_after_iters=100, log_after_iters=100,
                  validate_iters=None, num_iterations=1, num_epoch=0,
                  eval_score_higher_is_better=True, best_eval_score=None,
-                 tensorboard_formatter=None, skip_train_validation=False):
+                 tensorboard_formatter=None, skip_train_validation=False,
+                 accumulation_iters=1):
 
         self.model = model
         self.optimizer = optimizer
@@ -66,6 +67,7 @@ class UNet3DTrainer:
         self.log_after_iters = log_after_iters
         self.validate_iters = validate_iters
         self.eval_score_higher_is_better = eval_score_higher_is_better
+        self.accumulation_iters=accumulation_iters
 
         logger.info(model)
         logger.info(f'eval_score_higher_is_better: {eval_score_higher_is_better}')
@@ -90,7 +92,7 @@ class UNet3DTrainer:
 
     @classmethod
     def from_checkpoint(cls, checkpoint_path, model, optimizer, lr_scheduler, loss_criterion, eval_criterion, loaders,
-                        tensorboard_formatter=None, skip_train_validation=False):
+                        tensorboard_formatter=None, skip_train_validation=False, accumulation_iters=1):
         logger.info(f"Loading checkpoint '{checkpoint_path}'...")
         state = utils.load_checkpoint(checkpoint_path, model, optimizer)
         logger.info(
@@ -110,7 +112,8 @@ class UNet3DTrainer:
                    log_after_iters=state['log_after_iters'],
                    validate_iters=state['validate_iters'],
                    tensorboard_formatter=tensorboard_formatter,
-                   skip_train_validation=skip_train_validation)
+                   skip_train_validation=skip_train_validation,
+                   accumulation_iters=accumulation_iters)
 
     @classmethod
     def from_pretrained(cls, pre_trained, model, optimizer, lr_scheduler, loss_criterion, eval_criterion,
@@ -119,7 +122,7 @@ class UNet3DTrainer:
                         validate_after_iters=100, log_after_iters=100,
                         validate_iters=None, num_iterations=1, num_epoch=0,
                         eval_score_higher_is_better=True, best_eval_score=None,
-                        tensorboard_formatter=None, skip_train_validation=False):
+                        tensorboard_formatter=None, skip_train_validation=False, accumulation_iters=1):
         logger.info(f"Logging pre-trained model from '{pre_trained}'...")
         utils.load_checkpoint(pre_trained, model, None, strict=False)
         checkpoint_dir = os.path.split(pre_trained)[0]
@@ -136,7 +139,8 @@ class UNet3DTrainer:
                    log_after_iters=log_after_iters,
                    validate_iters=validate_iters,
                    tensorboard_formatter=tensorboard_formatter,
-                   skip_train_validation=skip_train_validation)
+                   skip_train_validation=skip_train_validation,
+                   accumulation_iters=accumulation_iters)
 
     def fit(self):
         for _ in range(self.num_epoch, self.max_num_epochs):
@@ -179,7 +183,9 @@ class UNet3DTrainer:
             # compute gradients and update parameters
             self.optimizer.zero_grad()
             loss.backward()
-            self.optimizer.step()
+            
+            if self.num_iterations % self.accumulation_iters == 0:
+                self.optimizer.step()
 
             if self.num_iterations % self.validate_after_iters == 0:
                 # set the model in eval mode
