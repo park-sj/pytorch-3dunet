@@ -149,10 +149,10 @@ class AttentionInner(nn.Module):
         self.attn = SelfAttention(num_heads, embed_dim, dropout)
         
     def forward(self, x):
-        # h = x
+        h = x
         x = self.attention_norm(x)
         x, weights = self.attn(x)
-        # x = x + h
+        x = x + h
         return x
     
 
@@ -200,7 +200,7 @@ class Transformer(nn.Module):
         hidden_states = self.embeddings(x)
 
         for depth, layer_block in enumerate(self.layer):
-            hidden_states, _ = layer_block(hidden_states)
+            hidden_states = layer_block(hidden_states)
             if depth + 1 in self.extract_layers:
                 extract_layers.append(hidden_states)
 

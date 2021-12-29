@@ -2,7 +2,7 @@
 # manual_seed: 0
 # model configuration
 model:
-  name: UNETR
+  name: RevUNETR
   img_shape: [128, 128, 128]
   input_dim: 1
   output_dim: 1
@@ -70,7 +70,7 @@ loaders:
   # batch dimension; if number of GPUs is N > 1, then a batch_size of N * batch_size will automatically be taken for DataParallel
   batch_size: 1
   # how many subprocesses to use for data loading
-  num_workers: 4
+  num_workers: 1
   # path to the raw data within the H5
   raw_internal_path: raw
   # path to the the label data withtin the H5
