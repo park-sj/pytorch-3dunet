@@ -1,4 +1,5 @@
-model_path: 3dunet/best_checkpoint.pytorch
+model_path: 3dunet/210913_500+data_skin.pytorch
+device: cpu
 # model configuration
 model:
   # model class, e.g. UNet3D, ResidualUNet3D, NoNewReversible
@@ -11,6 +12,7 @@ model:
   layer_order: gcr
   # feature maps scale factor
   f_maps: 4
+  channels: [16, 32, 64, 128, 256]
   # number of groups in the groupnorm
   num_groups: 4
   # number of levels in the encoder/decoder path
@@ -40,21 +42,22 @@ loaders:
   weight_internal_path: null
   # configuration of the test loader
   test:
-    # paths to the validation datasets; if a given path is a directory all H5 files ('*.h5', '*.hdf', '*.hdf5', '*.hd5')
-    # inside this this directory will be included as well (non-recursively)
+    # paths to the files to predict
+    # Data is loaded from 'file_paths/test'
     file_paths:
+      - 'io/'
+    # The result is saved to 'save_paths/save'
+    save_paths: 
       - 'io/'
     slice_builder:
       # SliceBuilder class
       name: SliceBuilder
-      # train patch size given to the network (adapt to fit in your GPU mem, generally the bigger patch the better)
-      patch_shape: [296, 296, 296]
-      stride_shape: [120, 120, 120] # [120, 96] or [240, 180]
     transformer:
       raw:
-        - name: Standardize
-        - name: ToTensor
-          expand_dims: true
-      label:
+        - name: Normalize
+          min_value: -100
+          max_value: 1250
+        - name: Resize
+          shape: [296, 296, 296]
         - name: ToTensor
           expand_dims: true
