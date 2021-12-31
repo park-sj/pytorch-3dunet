@@ -6,7 +6,6 @@ from scipy.ndimage import rotate, map_coordinates, gaussian_filter
 from scipy.ndimage.filters import convolve
 from skimage.filters import gaussian
 from skimage.segmentation import find_boundaries
-from skimage.transform import resize
 from torchvision.transforms import Compose
 
 # WARN: use fixed random state for reproducibility; if you want to randomize on each run seed with `time.time()` e.g.
@@ -21,10 +20,10 @@ class RandomFlip:
     otherwise the models won't converge.
     """
 
-    def __init__(self, random_state, axes = [0, 1, 2], axis_prob=0.5, **kwargs):
+    def __init__(self, random_state, axis_prob=0.5, **kwargs):
         assert random_state is not None, 'RandomState cannot be None'
         self.random_state = random_state
-        self.axes = axes
+        self.axes = (0, 1, 2)
         self.axis_prob = axis_prob
 
     def __call__(self, m):
@@ -604,15 +603,6 @@ class AdditivePoissonNoise:
             return m + poisson_noise
         return m
 
-
-class Resize:
-    def __init__(self, shape, **kwargs):
-        self.shape = shape
-    
-    def __call__(self, m):
-        m = resize(m, self.shape, anti_aliasing = False)
-        return m
-    
 
 class ToTensor:
     """

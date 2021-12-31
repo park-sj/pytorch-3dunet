@@ -6,6 +6,7 @@ import numpy as np
 import torch
 import SimpleITK as sitk
 import os
+import scipy.ndimage
 import skimage.transform
 
 from sklearn.cluster import MeanShift
@@ -65,8 +66,6 @@ class StandardPredictor(_AbstractPredictor):
     def __init__(self, model, loader, output_file, config, **kwargs):
         super().__init__(model, loader, output_file, config, **kwargs)
         self.it = 0
-        self.file_paths = os.path.join(self.config['loaders']['test']['file_paths'][0],'test')
-        self.save_paths = os.path.join(self.config['loaders']['test']['save_paths'][0],'save')
 
     def predict(self):
         out_channels = self.config['model'].get('out_channels')
@@ -81,10 +80,33 @@ class StandardPredictor(_AbstractPredictor):
         output_heads = self.config['model'].get('output_heads', 1)
 
         logger.info(f'Running prediction on {len(self.loader)} batches...')
-        
+
+        # dimensionality of the the output predictions
+        # volume_shape = self._volume_shape(self.loader.dataset)
+        x, _ = self.loader.dataset[0]
+        # volume_shape = (x.shape)[1:]
+        volume_shape = (296, 296, 296)
+
+        if prediction_channel is None:
+            prediction_maps_shape = (out_channels,) + volume_shape
+        else:
+            # single channel prediction map
+            prediction_maps_shape = (1,) + volume_shape
+
+        logger.info(f'The shape of the output prediction maps (CDHW): {prediction_maps_shape}')
+
+        patch_halo = self.predictor_config.get('patch_halo', (8, 8, 5))
+        self._validate_halo(patch_halo, self.config['loaders']['test']['slice_builder'])
+        logger.info(f'Using patch_halo: {patch_halo}')
+
+        # create destination H5 file
+        # h5_output_file = h5py.File(self.output_file, 'w')
+        np_output_file = np.zeros(volume_shape)
         # allocate prediction and normalization arrays
         logger.info('Allocating prediction and normalization arrays...')
-        
+        prediction_maps, normalization_masks = self._allocate_prediction_maps(prediction_maps_shape,
+                                                                              output_heads, np_output_file)
+
         # Sets the module in evaluation mode explicitly (necessary for batchnorm/dropout layers if present)
         self.model.eval()
         # Set the `testing=true` flag otherwise the final Softmax/Sigmoid won't be applied!
@@ -92,31 +114,103 @@ class StandardPredictor(_AbstractPredictor):
         # Run predictions on the entire input dataset
         with torch.no_grad():
             # for batch, indices in self.loader:
-            for batch in self.loader:
+            for batch, indices in self.loader:
+                # indices = (indices,)
                 # send batch to device
                 batch = batch.to(device)
 
                 # forward pass
                 # batch = torch.unsqueeze(batch, 0)
                 predictions = self.model(batch)
-                
+
+                # x = predictions.clone().cpu()
+                # np.save('/home/shkim/Libraries/pytorch-3dunet/datasets/JW/prediction' + str(indices[0]),
+                #         x.numpy())
+                # logger.info(f'Prediciton for {indices[0]} saved as {"datasets/JW/prediction" + str(indices[0])}')
+                # wrap predictions into a list if there is only one output head from the network
                 if output_heads == 1:
                     predictions = [predictions]
 
-                for prediction in predictions:
-                    prediction = prediction.cpu().numpy()
-                    patients = os.listdir(self.file_paths)
-                    logger.info(f"Predictions of {self.file_paths}")
-                    logger.info(f"Saving predictions to: {self.save_paths}...")
-                    self._save_dicom(prediction,
-                                     os.path.join(self.save_paths, patients[self.it]),
-                                     os.path.join(self.file_paths, patients[self.it]))
-                    self.it += 1
+                # for each output head
+                for prediction, prediction_map, normalization_mask in zip(predictions, prediction_maps,
+                                                                          normalization_masks):
 
+                    # convert to numpy array
+                    prediction = prediction.cpu().numpy()
+
+                    # for each batch sample
+                    for pred, index in zip(prediction, indices):
+                        # save patch index: (C,D,H,W)
+                        if prediction_channel is None:
+                            channel_slice = slice(0, out_channels)
+                        else:
+                            channel_slice = slice(0, 1)
+                        # print(index)
+                        index = (channel_slice,) + index
+
+                        if prediction_channel is not None:
+                            # use only the 'prediction_channel'
+                            logger.info(f"Using channel '{prediction_channel}'...")
+                            pred = np.expand_dims(pred[prediction_channel], axis=0)
+
+                        logger.info(f'Saving predictions for slice:{index}...')
+
+                        # remove halo in order to avoid block artifacts in the output probability maps
+                        u_prediction, u_index = remove_halo(pred, index, volume_shape, patch_halo)
+                        # accumulate probabilities into the output prediction array
+                        prediction_map[u_index] += u_prediction
+                        # count voxel visits for normalization
+                        normalization_mask[u_index] += 1
+
+        # save results to
+                    self._save_results(prediction_maps, normalization_masks, output_heads, np_output_file, self.loader.dataset)
+        # close the output H5 file
+        # h5_output_file.close()
+
+    def _allocate_prediction_maps(self, output_shape, output_heads, output_file):
+        # initialize the output prediction arrays
+        prediction_maps = [np.zeros(output_shape, dtype='float32') for _ in range(output_heads)]
+        # initialize normalization mask in order to average out probabilities of overlapping patches
+        normalization_masks = [np.zeros(output_shape, dtype='uint8') for _ in range(output_heads)]
+        return prediction_maps, normalization_masks
+
+    def _save_results(self, prediction_maps, normalization_masks, output_heads, output_file, dataset):
+        def _slice_from_pad(pad):
+            if pad == 0:
+                return slice(None, None)
+            else:
+                return slice(pad, -pad)
+
+        # save probability maps
+        prediction_datasets = self._get_output_dataset_names(output_heads, prefix='predictions')
+        for prediction_map, normalization_mask, prediction_dataset in zip(prediction_maps, normalization_masks,
+                                                                          prediction_datasets):
+            prediction_map = prediction_map / normalization_mask
+
+            if dataset.mirror_padding is not None:
+                z_s, y_s, x_s = [_slice_from_pad(p) for p in dataset.mirror_padding]
+
+                logger.info(f'Dataset loaded with mirror padding: {dataset.mirror_padding}. Cropping before saving...')
+
+                prediction_map = prediction_map[:, z_s, y_s, x_s]
+
+            logger.info(f'Saving predictions to: {self.output_file}/{prediction_dataset}...')
+            # output_file.create_dataset(prediction_dataset, data=prediction_map, compression="gzip")
+        # np.save('/home/shkim/Libraries/pytorch-3dunet/prediction/'+prediction_dataset, prediction_map)
+        patient = os.listdir(os.path.join(os.getcwd(), 'io', 'test'))
+        self._save_dicom(prediction_map, os.path.join(os.getcwd(), 'io', 'save', patient[self.it]))
+        self.it += 1
 
     @staticmethod
-    def _save_dicom(newArray, filepath, template_path):
-        def _load_template(dir):
+    def _save_dicom(newArray, filepath):
+        def _load_template():
+            patient = filepath.split('/')[-1]
+            dir = os.path.join(os.getcwd(), 'io', 'test', patient)
+            # dir = '/home/shkim/SpyderProjects/0611/'
+            # dir = '/home/shkim/Libraries/pytorch-3dunet/datasets/JW/test/'
+            # dir = '/home/shkim/Libraries/pytorch-3dunet/datasets/H/test/'
+            # patient = os.listdir(dir)
+            # dir = os.path.join(dir, patient[0])
             logger.info("The template DCM directory is " + dir)
             assert os.path.isdir(dir), 'Cannot find the template directory'
             reader = sitk.ImageSeriesReader()
@@ -132,14 +226,26 @@ class StandardPredictor(_AbstractPredictor):
         if not os.path.isdir(filepath):
             os.mkdir(filepath)
 
-        oldImage, reader, imgShape = _load_template(template_path)
+        oldImage, reader, imgShape = _load_template()
         logger.info("The template is loaded.")
-        if len(newArray.shape) > 3:
-            newArray = np.squeeze(newArray)
+        newArray = np.squeeze(newArray)
+        # newArray = scipy.ndimage.zoom(newArray, 2, order = 0)
         newArray = skimage.transform.resize(newArray, imgShape, anti_aliasing=False)
+        # newArray = skimage.transform.rescale(newArray, 2, anti_aliasing = False)
+        # newArray = skimage.transform.resize(newArray, (newArray.shape[0]*2, newArray.shape[1]*2, newArray.shape[2]*2), anti_aliasing=False)
         newArray[newArray > 0.5] = 1
         newArray[newArray <= 0.5] = 0
+        # newArray *= 1000
+        # for _ in range(10):
+        #     newArray = scipy.ndimage.binary_erosion(scipy.ndimage.binary_dilation(newArray))
+        #     newArray = scipy.ndimage.binary_dilation(scipy.ndimage.binary_erosion(newArray))
+        # newArray = scipy.ndimage.zoom(newArray, 2, order = 1)
+        # paddedArray = np.pad(newArray.astype(np.int16), ((4, 4),)*3, 'constant', constant_values =  ((0, 0),)*3)
         paddedArray = newArray.astype(np.int16)
+        # paddedArray = np.flip()
+        # paddedArray = paddedArray.transpose((2, 0, 1))
+        # paddedArray = paddedArray.transpose((1,2,0))
+        # assert paddedArray.shape == (600,)*3, 'You idiot messed up with output dimension. Check unet3d/predictor.py --p.'
         newImage = sitk.GetImageFromArray(paddedArray)
         newImage = sitk.Cast(newImage, sitk.sitkInt8)
         # newImage.CopyInformation(oldImage)
@@ -160,6 +266,8 @@ class StandardPredictor(_AbstractPredictor):
         series_tag_values = [(k, reader.GetMetaData(0, k)) for k in reader.GetMetaDataKeys(0)] + \
                              [("0008|0031", modification_time),
                              ("0008|0021", modification_date),
+                             ("0028|0010", "296"),
+                             ("0028|0011", "296"),
                              ("0028|0100", "8"),
                              ("0028|0101", "8"),
                              ("0028|0102", "7"),
@@ -173,7 +281,7 @@ class StandardPredictor(_AbstractPredictor):
         logger.info(f'Saving mask into {filepath}')
         tags_to_skip = ['0010|0010', '0028|0030', '7fe0|0010', '7fe0|0000', '0028|1052',
                         '0028|1053', '0028|1054', '0010|4000', '0008|1030', '0010|1001',
-                        '0008|0080', '0010|0040', '0008|1010']
+                        '0008|0080', '0010|0040']
         for i in range(newImage.GetDepth()):
             image_slice = newImage[:, :, i]
             # image_slice.CopyInformation(oldImage[:, :, i])
