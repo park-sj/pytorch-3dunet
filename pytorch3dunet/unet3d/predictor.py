@@ -66,6 +66,8 @@ class StandardPredictor(_AbstractPredictor):
     def __init__(self, model, loader, output_file, config, **kwargs):
         super().__init__(model, loader, output_file, config, **kwargs)
         self.it = 0
+        self.file_paths = os.path.join(self.config['loaders']['test']['file_paths'][0],'test')
+        self.save_paths = os.path.join(self.config['loaders']['test']['save_paths'][0],'save')
 
     def predict(self):
         out_channels = self.config['model'].get('out_channels')

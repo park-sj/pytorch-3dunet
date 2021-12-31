@@ -27,7 +27,7 @@ loaders:
   # class of the HDF5 dataset, currently StandardHDF5Dataset and LazyHDF5Dataset are supported.
   # When using LazyHDF5Dataset make sure to set `num_workers = 1`, due to a bug in h5py which corrupts the data
   # when reading from multiple threads.
-  dataset: DicomTestDataset
+  dataset: DicomDataset
   # batch dimension; if number of GPUs is N > 1, then a batch_size of N * batch_size will automatically be taken for DataParallel
   batch_size: 1
   # how many subprocesses to use for data loading
@@ -43,6 +43,9 @@ loaders:
     # paths to the validation datasets; if a given path is a directory all H5 files ('*.h5', '*.hdf', '*.hdf5', '*.hd5')
     # inside this this directory will be included as well (non-recursively)
     file_paths:
+      - 'io/'
+    # The result is saved to 'save_paths/save'
+    save_paths: 
       - 'io/'
     slice_builder:
       # SliceBuilder class
