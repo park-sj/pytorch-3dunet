@@ -21,3 +21,5 @@ logs/
 pytorch3dunet.egg-info/
 dist/
 build/
+
+pytorch3dunet/io
