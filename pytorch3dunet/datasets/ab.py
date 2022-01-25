@@ -60,22 +60,14 @@ class ABDataset(ConfigDataset):
         slice_builder = get_slice_builder(np.expand_dims(self.cur_image, 0), None, None, self.slice_builder_config)
         self.image_slices = slice_builder.raw_slices
         
-        # min_value, max_value, mean, std = calculate_stats(self.cur_image.astype(np.float32))
-        self.min_value = -500
-        self.max_value = 2000
-        self.cur_image[self.cur_image>self.max_value] = self.max_value
-        self.cur_image[self.cur_image<self.min_value] = self.min_value
-        mean = (self.min_value + self.max_value)/2
-        std = (self.max_value - self.min_value)/2
-        transformer = transforms.get_transformer(self.transformer_config, min_value=self.min_value, max_value=self.max_value,
-                                                 mean=mean, std=std)
+        # stats are dummy value
+        transformer = transforms.get_transformer(self.transformer_config, min_value=0, max_value=0,
+                                                 mean=0, std=0)
         self.raw_transform = transformer.raw_transform()
         if self.phase != 'test':
-            self.masks_transform = transformer.label_transform()
-        self.cur_image = np.expand_dims(self.cur_image, 0)        
+            self.masks_transform = transformer.label_transform()      
         if self.phase != 'test':
             self.cur_mask = self._load_files(os.path.join(self.file_path, self.phase + '_masks', self.patients[count]))
-            self.cur_mask = np.expand_dims(self.cur_mask, 0)
         else:
             self.cur_mask = None
         
@@ -84,7 +76,6 @@ class ABDataset(ConfigDataset):
         image = self.image_slices[idx]
         image = self._transform_patches(self.cur_image, image, self.raw_transform)
 
-        
         if self.phase != 'test':
             mask = self.masks_transform(self.cur_mask)
             return image, mask
