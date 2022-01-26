@@ -4,6 +4,9 @@
 Created on Thu Sep  9 18:11:16 2021
 
 @author: shkim
+
+dicom 영상을 patch단위로 훈련돌리고 싶을 때 data를 준비하기 위한 코드
+결과는 npz 파일 형식으로 저장함
 """
 
 import SimpleITK as sitk

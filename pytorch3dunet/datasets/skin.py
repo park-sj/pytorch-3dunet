@@ -75,21 +75,14 @@ class SkinDcmDataset(ConfigDataset):
                          (math.ceil((target_size[1]-input_shape[1])/2), (math.floor((target_size[1]-input_shape[1])/2))),
                          (math.ceil((target_size[2]-input_shape[2])/2), (math.floor((target_size[2]-input_shape[2])/2))))
         self.target_size = target_size
-        self.cur_image = np.pad(self.cur_image, padding_shape, mode="constant", constant_values=-750)
+        self.cur_image = np.pad(self.cur_image, padding_shape, mode="constant", constant_values=self.transformer_config['raw']['Normalize']['min_value'])
         self.cur_image = np.expand_dims(self.cur_image, 0)  
         
         slice_builder = get_slice_builder(self.cur_image, None, self.weight_maps, self.slice_builder_config)
         
-        # min_value, max_value, mean, std = calculate_stats(self.cur_image.astype(np.float32))
-        self.min_value = -750
-        self.max_value = 1250
-        self.cur_image[self.cur_image>self.max_value] = self.max_value
-        self.cur_image[self.cur_image<self.min_value] = self.min_value
-        # self.cur_image = resize(self.cur_image.astype(np.float32), (296, 296, 296), anti_aliasing = False)
-        mean = (self.min_value + self.max_value)/2
-        std = (self.max_value - self.min_value)/2
-        transformer = transforms.get_transformer(self.transformer_config, min_value=self.min_value, max_value=self.max_value,
-                                                 mean=mean, std=std)
+        # stats are dummy value
+        transformer = transforms.get_transformer(self.transformer_config, min_value=0, max_value=0,
+                                                 mean=0, std=0)
         self.raw_transform = transformer.raw_transform()
               
         self.image_slices = slice_builder.raw_slices
@@ -100,9 +93,7 @@ class SkinDcmDataset(ConfigDataset):
         idx = idx % self.patch_per_image
         image = self.image_slices[idx]
         
-        
         image = self._transform_patches(self.cur_image, image, self.raw_transform)
-
         
         raw_idx = self.image_slices[idx]
         if len(raw_idx) == 4:
@@ -151,5 +142,4 @@ class SkinDcmDataset(ConfigDataset):
         reader.LoadPrivateTagsOn()
         image = reader.Execute()
         img3d = sitk.GetArrayFromImage(image)
-        # img3d = img3d.transpose((1,2,0))
         return img3d
