@@ -198,4 +198,25 @@ If you use this code for your research, please cite as:
 }
 ```
 
+## 추가 설명 (손준원 작성)
+model이나 predictor, dataset등을 새로 만들어 추가할 때, get 함수의 탐색 범위에 새로 추가한 python 파일을 명시해주면 기존에 있는 것들과 같은 방식으로 사용할 수 있다. 예를 들어, model.py의 get_model 함수의 modules을 참고하라.
+```
+def get_model(config):
+    def _model_class(class_name):
+        modules = ['pytorch3dunet.unet3d.model', 'pytorch3dunet.unet3d.rev_model', 'pytorch3dunet.unet3d.unetr_model', 'pytorch3dunet.unet3d.revunetr_model']
+        for module in modules:
+            m = importlib.import_module(module)
+            clazz = getattr(m, class_name, None)
+            if clazz:
+                return clazz
+        raise RuntimeError(f'Unsupported model class: {class_name}')
 
+    assert 'model' in config, 'Could not find model configuration'
+    model_config = config['model']
+    model_class = _model_class(model_config['name'])
+    return model_class(**model_config)
+```
+
+wolny가 작성한 original code와 달리 수정한 코드에서는 patch 단위가 아니라 전체 이미지를 통째로 forward 하는 것을 default로 한다. 이를 위해서는, DicomDataset, StandardPredictor를 사용하면 된다. 만약에 patch 단위로 쪼개 forward 하고 싶다면 훈련 과정에서는 dicom2npz.py를 이용해 미리 훈련데이터를 가공해서 NpzDataset을 이용해 학습하고, prediction 단계에서는 PatchwisePredictor과 PatchwiseDcmDataset을 사용하면 된다. 뼈, 비강은 현재 일부만 crop해서 forward 하도록 되어있는데 훈련 시에는 NpzDataset을 이용하고, prediction에는 ABDataset과 ABPredictor를 이용하면 된다. ABPredictor는 실행하면 x, y, z 범위를 입력받고 그에 맞는 부분만 잘라서 forward한다.
+
+NpzDatasets은 각 파일이 dictionary로 'ct' key에 ct 영상이, 'mask'에 mask array가 저장되어 있어야 한다.
