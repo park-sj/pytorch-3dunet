@@ -113,7 +113,6 @@ class DicomDataset(ConfigDataset):
     @staticmethod
     def _load_files(dir):
         assert os.path.isdir(dir), 'Cannot find the dataset directory'
-        # logger.info(f'Loading data from {dir}')
         reader = sitk.ImageSeriesReader()
         dicomFiles = reader.GetGDCMSeriesFileNames(dir)
         reader.SetFileNames(dicomFiles)
@@ -121,5 +120,4 @@ class DicomDataset(ConfigDataset):
         reader.LoadPrivateTagsOn()
         image = reader.Execute()
         img3d = sitk.GetArrayFromImage(image)
-        # img3d = img3d.transpose((1,2,0))
         return img3d

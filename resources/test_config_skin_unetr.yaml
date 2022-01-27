@@ -1,29 +1,23 @@
 model_path: 3dunet/best_checkpoint.pytorch
 # model configuration
 model:
-  # model class, e.g. UNet3D, ResidualUNet3D
-  name: ResidualUNet3D
-  # number of input channels to the model
-  in_channels: 1
-  # number of output channels
-  out_channels: 1
-  # determines the order of operators in a single layer (gcr - GroupNorm+Conv3d+ReLU)
-  layer_order: gcr
-  # feature maps scale factor
-  f_maps: 4
-  # number of groups in the groupnorm
-  num_groups: 4
-  # number of levels in the encoder/decoder path
-  num_levels: 4
+  name: RevUNETR
+  img_shape: [128, 128, 128]
+  input_dim: 1
+  output_dim: 1
+  embed_dim: 768
+  patch_size: 16
+  num_heads: 12
+  dropout: 0.1
+  # apply element-wise nn.Sigmoid after the final 1x1 convolution, otherwise apply nn.Softmax
+  final_sigmoid: true
   # if True applies the final normalization layer (sigmoid or softmax), otherwise the networks returns the output from the final convolution layer; use False for regression problems, e.g. de-noising
-  is_segmentation: false
+  is_segmentation: true
 # predictor configuration
 predictor:
   name: 'StandardPredictor'
-# data loaders configuration
+# specify the test datasets
 loaders:
-  # class of the HDF5 dataset, currently StandardHDF5Dataset and LazyHDF5Dataset are supported.
-  # When using LazyHDF5Dataset make sure to set `num_workers = 1`, due to a bug in h5py which corrupts the data
   # when reading from multiple threads.
   dataset: DicomDataset
   # batch dimension; if number of GPUs is N > 1, then a batch_size of N * batch_size will automatically be taken for DataParallel
@@ -36,25 +30,46 @@ loaders:
   label_internal_path: label
   # path to the pixel-wise weight map withing the H5 if present
   weight_internal_path: null
-  # configuration of the train loader
+  # configuration of the test loader
   test:
-    # absolute paths to the training datasets; if a given path is a directory all H5 files ('*.h5', '*.hdf', '*.hdf5', '*.hd5')
-    # inside this this directory will be included as well (non-recursively)
+    # paths to the files to predict
     file_paths:
-      - '/home/shkim/Libraries/pytorch-3dunet/pytorch3dunet/io/'
+      - 'io/test'
+    # The path where the result is saved to
+    save_paths: 
+      - 'io/save'
     slice_builder:
       # SliceBuilder class
       name: SliceBuilder
       # train patch size given to the network (adapt to fit in your GPU mem, generally the bigger patch the better)
       patch_shape: [296, 296, 296]
       stride_shape: [120, 120, 120] # [120, 96] or [240, 180]
-    # data transformations/augmentations
     transformer:
       raw:
+        # crop some axial slices for robust training
+        - name: AxialCrop
+          lower_end: 100
+          upper_end: -100
+          # execute only when the number of slices exceeds the criterion
+          criterion: 600
+        # min-max scaling, range of the data shrinks to [-1,1]
+        - name: Normalize
+          min_value: -750
+          max_value: 1250
+        # resize by scikit-image library
+        - name: Resize
+          shape: [296, 296, 296]
         # convert to torch tensor
         - name: ToTensor
           # add additional 'channel' axis when the input data is 3D
           expand_dims: true
       label:
+        # crop some axial slices for robust training
+        - name: AxialCrop
+          lower_end: 100
+          upper_end: -100
+        # resize by scikit-image library
+        - name: Resize
+          shape: [296, 296, 296]
         - name: ToTensor
           expand_dims: true

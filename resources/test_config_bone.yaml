@@ -53,7 +53,10 @@ loaders:
       stride_shape: [120, 120, 120] # [120, 96] or [240, 180]
     transformer:
       raw:
-        - name: Standardize
+        # min-max scaling, range of the data shrinks to [-1,1]
+        - name: Normalize
+          min_value: -500
+          max_value: 2000
         - name: ToTensor
           expand_dims: true
       label:

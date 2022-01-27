@@ -2,20 +2,14 @@
 # manual_seed: 0
 # model configuration
 model:
-  # model class, e.g. UNet3D, ResidualUNet3D
-  name: ResidualUNet3D # NoNewReversible
-  # number of input channels to the model
-  in_channels: 1
-  # number of output channels
-  out_channels: 1
-  # determines the order of operators in a single layer (gcr - GroupNorm+Conv3d+ReLU)
-  layer_order: gcr
-  # feature maps scale factor
-  f_maps: 4
-  # number of groups in the groupnorm
-  num_groups: 4
-  # number of levels in the encoder/decoder path
-  num_levels: 4
+  name: RevUNETR
+  img_shape: [128, 128, 128]
+  input_dim: 1
+  output_dim: 1
+  embed_dim: 768
+  patch_size: 16
+  num_heads: 12
+  dropout: 0.1
   # apply element-wise nn.Sigmoid after the final 1x1 convolution, otherwise apply nn.Softmax
   final_sigmoid: true
   # if True applies the final normalization layer (sigmoid or softmax), otherwise the networks returns the output from the final convolution layer; use False for regression problems, e.g. de-noising
@@ -27,19 +21,21 @@ trainer:
   # path to latest checkpoint; if provided the training will be resumed from that checkpoint
   resume: Null
   # how many iterations between validations
-  validate_after_iters: 20
+  validate_after_iters: 50
   # how many iterations between tensorboard logging
-  log_after_iters: 20
+  log_after_iters: 50
+  # how many iterations between gradient accumulation (default = 1 which means don't accumulate gradients)
+  accumulation_iters: 1
   # max number of epochs
   epochs: 30
   # max number of iterations
-  iters: 100000
+  iters: 1000000
   # model with higher eval score is considered better
   eval_score_higher_is_better: True
 # optimizer configuration
 optimizer:
   # initial learning rate
-  learning_rate: 0.0002
+  learning_rate: 0.000002
   # weight decay
   weight_decay: 0.0001
 # loss function configuration
@@ -56,20 +52,19 @@ eval_metric:
   # use AdaptedRandError metric
   name: MeanIoU
   # probability maps thresholds to validate on
-  thresholds: [0.4]
+  thresholds: [0.5]
   # use the last target channel to compute the metric
   use_last_target: true
   # use only the first channel for computing the metric
   input_channel: 0
 lr_scheduler:
-  name: MultiStepLR
-  milestones: [10, 30, 60]
-  gamma: 0.2
+  name: CosineAnnealingWarmUpRestarts
+  T_0: 400
+  eta_max: 0.001
+  T_up: 50
+  gamma: 0.5
 # data loaders configuration
 loaders:
-  # class of the HDF5 dataset, currently StandardHDF5Dataset and LazyHDF5Dataset are supported.
-  # When using LazyHDF5Dataset make sure to set `num_workers = 1`, due to a bug in h5py which corrupts the data
-  # when reading from multiple threads.
   dataset: DicomDataset
   # batch dimension; if number of GPUs is N > 1, then a batch_size of N * batch_size will automatically be taken for DataParallel
   batch_size: 1
@@ -83,46 +78,94 @@ loaders:
   weight_internal_path: null
   # configuration of the train loader
   train:
-    # absolute paths to the training datasets; if a given path is a directory all H5 files ('*.h5', '*.hdf', '*.hdf5', '*.hd5')
-    # inside this this directory will be included as well (non-recursively)
+    # absolute paths to the training datasets
     file_paths:
-      - '/home/shkim/Libraries/pytorch-3dunet/datasets/matching/'
+      - '/media/shkim/7cf97277-d9cd-454f-994f-59734f6775d0/skin_data/'
     slice_builder:
       # SliceBuilder class
       name: SliceBuilder
       # train patch size given to the network (adapt to fit in your GPU mem, generally the bigger patch the better)
-      patch_shape: [296, 296, 296]
-      stride_shape: [120, 120, 120] # [120, 96] or [240, 180]
+      patch_shape: [128, 128, 128]
+      stride_shape: [120, 120, 120]
     # data transformations/augmentations
     transformer:
+      transformer:
       raw:
-        # re-scale the values to be 0-mean and 1-std
-        - name: Standardize
+        # crop some axial slices for robust training
+        - name: AxialCrop
+          lower_end: 100
+          upper_end: -100
+          # execute only when the number of slices exceeds the criterion
+          criterion: 600
+        # min-max scaling, range of the data shrinks to [-1,1]
+        - name: Normalize
+          min_value: -750
+          max_value: 1250
+        # random flip for data augmentation (얼굴 좌우로만 함)
+        - name: RandomFlip
+          axes: [2]
+        # resize by scikit-image library
+        - name: Resize
+          shape: [128, 128, 128]
+        # additive Gaussian noise
+        - name: AdditiveGaussianNoise
+          execution_probability: 1.0
         # convert to torch tensor
         - name: ToTensor
           # add additional 'channel' axis when the input data is 3D
           expand_dims: true
       label:
+        # crop some axial slices for robust training
+        - name: AxialCrop
+          lower_end: 100
+          upper_end: -100
+          # execute only when the number of slices exceeds the criterion
+          criterion: 600
+        # random flip for data augmentation (얼굴 좌우로만 함)
+        - name: RandomFlip
+          axes: [2]
+        # resize by scikit-image library
+        - name: Resize
+          shape: [128, 128, 128]
         - name: ToTensor
           expand_dims: true
-
   # configuration of the validation loaders
   val:
-    # paths to the validation datasets; if a given path is a directory all H5 files ('*.h5', '*.hdf', '*.hdf5', '*.hd5')
-    # inside this this directory will be included as well (non-recursively)
+    # paths to the validation datasets
     file_paths:
-      - '/home/shkim/Libraries/pytorch-3dunet/datasets/matching/'
+      - '/media/shkim/7cf97277-d9cd-454f-994f-59734f6775d0/skin_data/'
     slice_builder:
       # SliceBuilder class
       name: SliceBuilder
       # train patch size given to the network (adapt to fit in your GPU mem, generally the bigger patch the better)
-      patch_shape: [296, 296, 296]
-      stride_shape: [120, 120, 120] # [120, 96] or [240, 180]
+      patch_shape: [128, 128, 128]
+      stride_shape: [120, 120, 120]
     transformer:
       raw:
-        - name: Standardize
+        # crop some axial slices for robust training
+        - name: AxialCrop
+          lower_end: 100
+          upper_end: -100
+          # execute only when the number of slices exceeds the criterion
+          criterion: 600
+        # min-max scaling, range of the data shrinks to [-1,1]
+        - name: Normalize
+          min_value: -750
+          max_value: 1250
+        # resize by scikit-image library
+        - name: Resize
+          shape: [128, 128, 128]
+        # convert to torch tensor
         - name: ToTensor
+          # add additional 'channel' axis when the input data is 3D
           expand_dims: true
       label:
+        # crop some axial slices for robust training
+        - name: AxialCrop
+          lower_end: 100
+          upper_end: -100
+        # resize by scikit-image library
+        - name: Resize
+          shape: [128, 128, 128]
         - name: ToTensor
           expand_dims: true
