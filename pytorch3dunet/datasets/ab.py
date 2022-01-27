@@ -16,6 +16,7 @@ import SimpleITK as sitk
 
 import pytorch3dunet.augment.transforms as transforms
 from pytorch3dunet.datasets.utils import get_slice_builder, ConfigDataset
+from pytorch3dunet.datasets.dicom import load_dicom_series
 from pytorch3dunet.unet3d.utils import get_logger
 
 logger = get_logger('DicomDataset')
@@ -54,7 +55,7 @@ class ABDataset(ConfigDataset):
             raise StopIteration
         if self.phase == 'test':
             logger.info(f'Loading dcm files from {os.path.join(self.file_path, self.phase, self.patients[count])}')
-        self.cur_image = self._load_files(os.path.join(self.file_path, self.phase, self.patients[count]))
+        self.cur_image = load_dicom_series(os.path.join(self.file_path, self.phase, self.patients[count]))
         
         # stats are dummy value
         transformer = transforms.get_transformer(self.transformer_config, min_value=0, max_value=0,
@@ -63,7 +64,7 @@ class ABDataset(ConfigDataset):
         if self.phase != 'test':
             self.masks_transform = transformer.label_transform()      
         if self.phase != 'test':
-            self.cur_mask = self._load_files(os.path.join(self.file_path, self.phase + '_masks', self.patients[count]))
+            self.cur_mask = load_dicom_series(os.path.join(self.file_path, self.phase + '_masks', self.patients[count]))
         else:
             self.cur_mask = None
         
@@ -108,16 +109,3 @@ class ABDataset(ConfigDataset):
 
         return [cls(file_paths[0], phase, slice_builder_config, transformer_config, mirror_padding)]
     
-    @staticmethod
-    def _load_files(dir):
-        assert os.path.isdir(dir), 'Cannot find the dataset directory'
-        # logger.info(f'Loading data from {dir}')
-        reader = sitk.ImageSeriesReader()
-        dicomFiles = reader.GetGDCMSeriesFileNames(dir)
-        reader.SetFileNames(dicomFiles)
-        reader.MetaDataDictionaryArrayUpdateOn()
-        reader.LoadPrivateTagsOn()
-        image = reader.Execute()
-        img3d = sitk.GetArrayFromImage(image)
-        # img3d = img3d.transpose((1,2,0))
-        return img3d

@@ -53,7 +53,7 @@ class DicomDataset(ConfigDataset):
             raise StopIteration
         if self.phase == 'test':
             logger.info(f'Loading dcm files from {os.path.join(self.file_path, self.phase, self.patients[count])}')
-        self.cur_image = self._load_files(os.path.join(self.file_path, self.phase, self.patients[count]))
+        self.cur_image = load_dicom_series(os.path.join(self.file_path, self.phase, self.patients[count]))
         
         # stats are dummy value
         transformer = transforms.get_transformer(self.transformer_config, min_value=0, max_value=0,
@@ -63,7 +63,7 @@ class DicomDataset(ConfigDataset):
             self.masks_transform = transformer.label_transform()
         self.cur_image = np.expand_dims(self.cur_image, 0)        
         if self.phase != 'test':
-            self.cur_mask = self._load_files(os.path.join(self.file_path, self.phase + '_masks', self.patients[count]))
+            self.cur_mask = load_dicom_series(os.path.join(self.file_path, self.phase + '_masks', self.patients[count]))
         else:
             self.cur_mask = None
         
@@ -109,15 +109,15 @@ class DicomDataset(ConfigDataset):
         mirror_padding = dataset_config.get('mirror_padding', None)
 
         return [cls(file_paths[0], phase, slice_builder_config, transformer_config, mirror_padding)]
-    
-    @staticmethod
-    def _load_files(dir):
-        assert os.path.isdir(dir), 'Cannot find the dataset directory'
-        reader = sitk.ImageSeriesReader()
-        dicomFiles = reader.GetGDCMSeriesFileNames(dir)
-        reader.SetFileNames(dicomFiles)
-        reader.MetaDataDictionaryArrayUpdateOn()
-        reader.LoadPrivateTagsOn()
-        image = reader.Execute()
-        img3d = sitk.GetArrayFromImage(image)
-        return img3d
+
+
+def load_dicom_series(dir):
+    assert os.path.isdir(dir), 'Cannot find the dataset directory'
+    reader = sitk.ImageSeriesReader()
+    dicomFiles = reader.GetGDCMSeriesFileNames(dir)
+    reader.SetFileNames(dicomFiles)
+    reader.MetaDataDictionaryArrayUpdateOn()
+    reader.LoadPrivateTagsOn()
+    image = reader.Execute()
+    img3d = sitk.GetArrayFromImage(image)
+    return img3d

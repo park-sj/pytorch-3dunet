@@ -9,29 +9,17 @@ dicom 영상을 patch단위로 훈련돌리고 싶을 때 data를 준비하기 �
 결과는 npz 파일 형식으로 저장함
 """
 
-import SimpleITK as sitk
-import numpy as np
-from skimage.transform import resize
 import os
+import numpy as np
 from random import randint
+from skimage.transform import resize
+
+from pytorch3dunet.datasets.dicom import load_dicom_series as _load_files
 
 ''' Configuration '''
 PATCH_PER_CT = 64
 PATCH_SIZE = (128,128,128)
 
-
-def _load_files(dir):
-    assert os.path.isdir(dir), 'Cannot find the dataset directory'
-    # logger.info(f'Loading data from {dir}')
-    reader = sitk.ImageSeriesReader()
-    dicomFiles = reader.GetGDCMSeriesFileNames(dir)
-    reader.SetFileNames(dicomFiles)
-    reader.MetaDataDictionaryArrayUpdateOn()
-    reader.LoadPrivateTagsOn()
-    image = reader.Execute()
-    img3d = sitk.GetArrayFromImage(image)
-    # img3d = img3d.transpose((1,2,0))
-    return img3d
 
 def prepare_dataset(root_dir, save_dir, mode):
     patients = os.listdir(os.path.join(root_dir,mode))
