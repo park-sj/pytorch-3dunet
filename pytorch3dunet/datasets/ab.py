@@ -56,10 +56,6 @@ class ABDataset(ConfigDataset):
             logger.info(f'Loading dcm files from {os.path.join(self.file_path, self.phase, self.patients[count])}')
         self.cur_image = self._load_files(os.path.join(self.file_path, self.phase, self.patients[count]))
         
-        self.slice_builder_config['patch_shape'] = list(self.cur_image.shape)
-        slice_builder = get_slice_builder(np.expand_dims(self.cur_image, 0), None, None, self.slice_builder_config)
-        self.image_slices = slice_builder.raw_slices
-        
         # stats are dummy value
         transformer = transforms.get_transformer(self.transformer_config, min_value=0, max_value=0,
                                                  mean=0, std=0)
@@ -73,17 +69,13 @@ class ABDataset(ConfigDataset):
         
     def __getitem__(self, idx):
         self.getImage(idx) 
-        image = self.image_slices[idx]
-        image = self._transform_patches(self.cur_image, image, self.raw_transform)
+        image = self.raw_transform(self.cur_image)
 
         if self.phase != 'test':
             mask = self.masks_transform(self.cur_mask)
             return image, mask
         else:
-            raw_idx = self.image_slices[idx]
-            if len(raw_idx) == 4:
-                raw_idx = raw_idx[1:]
-            return image, raw_idx
+            return image
         
     def __len__(self):
         return len(self.patients)
