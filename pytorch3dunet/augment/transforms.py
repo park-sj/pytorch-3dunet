@@ -12,6 +12,41 @@ from torchvision.transforms import Compose
 GLOBAL_RANDOM_STATE = np.random.RandomState(47)
 
 
+class AxialCrop:
+    """
+    As the upper and lower axial ends of CT masks are often imprecise,
+    it is sometimes preferred to crop the CT and mask arrays.
+    
+    If the number of axial slices exceeds the criterion,
+    then execute the crop.
+    If the criterion is None,
+    execute the crop always.
+    """
+    
+            
+    def __init__(self, lower_end=100, upper_end=-100, criterion=None, **kwargs):
+        self.lower_end = lower_end
+        self.upper_end = upper_end
+        self.criterion = criterion
+    
+    def __call__(self, m):
+        if self._check_criterion(m):
+            return self._crop(m)
+        else:
+            return m
+            
+    def _crop(self, m):
+        return m[self.lower_end:self.upper_end,:,:]
+    
+    def _check_criterion(self, m):
+        if self.criterion is None:
+            return True
+        elif m.shape[0]>=self.criterion:
+            return True
+        else:
+            return False
+        
+
 class RandomFlip:
     """
     Randomly flips the image across the given axes. Image can be either 3D (DxHxW) or 4D (CxDxHxW).
@@ -20,10 +55,10 @@ class RandomFlip:
     otherwise the models won't converge.
     """
 
-    def __init__(self, random_state, axis_prob=0.5, **kwargs):
+    def __init__(self, random_state, axes = [0, 1, 2], axis_prob=0.5, **kwargs):
         assert random_state is not None, 'RandomState cannot be None'
         self.random_state = random_state
-        self.axes = (0, 1, 2)
+        self.axes = axes
         self.axis_prob = axis_prob
 
     def __call__(self, m):
