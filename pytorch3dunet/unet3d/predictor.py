@@ -204,7 +204,7 @@ class StandardPredictor(_AbstractDicomPredictor):
                     self.it += 1
 
 
-class SkinPredictor(_AbstractDicomPredictor):
+class PatchwisePredictor(_AbstractDicomPredictor):
     """
     패치로 쪼개서 훈련된 모델을 위한 predictor
 

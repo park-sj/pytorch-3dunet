@@ -231,7 +231,7 @@ class RandomFilterSliceBuilder(EmbeddingsSliceBuilder):
 
 def _get_cls(class_name):
     modules = ['pytorch3dunet.datasets.hdf5', 'pytorch3dunet.datasets.dsb', 'pytorch3dunet.datasets.dicom',
-               'pytorch3dunet.datasets.npz', 'pytorch3dunet.datasets.skin', 'pytorch3dunet.datasets.ab',
+               'pytorch3dunet.datasets.npz', 'pytorch3dunet.datasets.patchwisedcm', 'pytorch3dunet.datasets.ab',
                'pytorch3dunet.datasets.utils',
                ]
     for module in modules:

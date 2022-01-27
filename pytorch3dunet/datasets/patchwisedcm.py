@@ -18,10 +18,11 @@ import SimpleITK as sitk
 import pytorch3dunet.augment.transforms as transforms
 from pytorch3dunet.datasets.utils import get_slice_builder, ConfigDataset, calculate_stats
 from pytorch3dunet.unet3d.utils import get_logger
+from pytorch3dunet.datasets.dicom import load_dicom_series
 
-logger = get_logger('SkinDataset')
+logger = get_logger('PatchwiseDcmDataset')
 
-class SkinDcmDataset(ConfigDataset):
+class PatchwiseDcmDataset(ConfigDataset):
     def __init__(self, file_path, phase, slice_builder_config, transformer_config, mirror_padding=(0, 32, 32)):
         """
         :param file_path: path to dicom root directory
@@ -57,7 +58,7 @@ class SkinDcmDataset(ConfigDataset):
             raise StopIteration
         if self.phase == 'test':
             logger.info(f'Loading dcm files from {os.path.join(self.file_path, self.phase, self.patients[count])}')
-        self.cur_image = self._load_files(os.path.join(self.file_path, self.phase, self.patients[count]))
+        self.cur_image = load_dicom_series(os.path.join(self.file_path, self.phase, self.patients[count]))
 
         ''' padding '''
         patch_shape = self.slice_builder_config['patch_shape']
@@ -131,15 +132,3 @@ class SkinDcmDataset(ConfigDataset):
 
         return [cls(file_paths[0], phase, slice_builder_config, transformer_config, mirror_padding)]
     
-    @staticmethod
-    def _load_files(dir):
-        assert os.path.isdir(dir), 'Cannot find the dataset directory'
-        # logger.info(f'Loading data from {dir}')
-        reader = sitk.ImageSeriesReader()
-        dicomFiles = reader.GetGDCMSeriesFileNames(dir)
-        reader.SetFileNames(dicomFiles)
-        reader.MetaDataDictionaryArrayUpdateOn()
-        reader.LoadPrivateTagsOn()
-        image = reader.Execute()
-        img3d = sitk.GetArrayFromImage(image)
-        return img3d
