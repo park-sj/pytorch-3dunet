@@ -1,0 +1,61 @@
+model_path: 3dunet/220111_revunetr_patch32.pytorch
+# model configuration
+model:
+  name: RevUNETR2
+  in_channels: 1
+  out_channels: 1
+  img_size: [128, 128, 128]
+  feature_size: 32
+  hidden_size: 768
+  mlp_dim: 3072
+  num_heads: 12
+  pos_embed: perceptron
+  norm_name: instance
+  res_block: True
+  dropout_rate: 0.0
+  # apply element-wise nn.Sigmoid after the final 1x1 convolution, otherwise apply nn.Softmax
+  final_sigmoid: true
+  # if True applies the final normalization layer (sigmoid or softmax), otherwise the networks returns the output from the final convolution layer; use False for regression problems, e.g. de-noising
+  is_segmentation: true
+# predictor configuration
+predictor:
+  name: 'StandardPredictor'
+# specify the test datasets
+loaders:
+  # class of the HDF5 dataset, currently StandardHDF5Dataset and LazyHDF5Dataset are supported.
+  # When using LazyHDF5Dataset make sure to set `num_workers = 1`, due to a bug in h5py which corrupts the data
+  # when reading from multiple threads.
+  dataset: DicomDataset
+  # batch dimension; if number of GPUs is N > 1, then a batch_size of N * batch_size will automatically be taken for DataParallel
+  batch_size: 1
+  # how many subprocesses to use for data loading
+  num_workers: 4
+  # path to the raw data within the H5
+  raw_internal_path: raw
+  # path to the the label data withtin the H5
+  label_internal_path: label
+  # path to the pixel-wise weight map withing the H5 if present
+  weight_internal_path: null
+  # configuration of the test loader
+  test:
+    # paths to the validation datasets; if a given path is a directory all H5 files ('*.h5', '*.hdf', '*.hdf5', '*.hd5')
+    # inside this this directory will be included as well (non-recursively)
+    file_paths:
+      - 'io/'
+    # The result is saved to 'save_paths/save'
+    save_paths: 
+      - 'io/'
+    slice_builder:
+      # SliceBuilder class
+      name: SliceBuilder
+      # train patch size given to the network (adapt to fit in your GPU mem, generally the bigger patch the better)
+      patch_shape: [128, 128, 128]
+      stride_shape: [120, 120, 120] # [120, 96] or [240, 180]
+    transformer:
+      raw:
+        - name: Standardize
+        - name: ToTensor
+          expand_dims: true
+      label:
+        - name: ToTensor
+          expand_dims: true

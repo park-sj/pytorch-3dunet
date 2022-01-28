@@ -23,3 +23,5 @@ dist/
 build/
 
 pytorch3dunet/io
+pytorch3dunet/3dunet/*
+datasets/*
