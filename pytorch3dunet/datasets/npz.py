@@ -78,7 +78,6 @@ class NpzDataset(ConfigDataset):
     def __getitem__(self, idx):
         self.getImage(int(idx / self.patch_per_image))
         name = self.patients[int(idx / self.patch_per_image)]
-        image = self.image_slices[idx]
         
         image = self.raw_transform(self.cur_image)
         if self.phase != 'test':

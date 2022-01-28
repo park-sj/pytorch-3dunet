@@ -6,6 +6,7 @@ from scipy.ndimage import rotate, map_coordinates, gaussian_filter
 from scipy.ndimage.filters import convolve
 from skimage.filters import gaussian
 from skimage.segmentation import find_boundaries
+from skimage.transform import resize
 from torchvision.transforms import Compose
 
 # WARN: use fixed random state for reproducibility; if you want to randomize on each run seed with `time.time()` e.g.
@@ -636,6 +637,15 @@ class AdditivePoissonNoise:
             lam = self.random_state.uniform(self.lam[0], self.lam[1])
             poisson_noise = self.random_state.poisson(lam, size=m.shape)
             return m + poisson_noise
+        return m
+
+
+class Resize:
+    def __init__(self, shape, **kwargs):
+        self.shape = shape
+    
+    def __call__(self, m):
+        m = resize(m, self.shape, anti_aliasing = False)
         return m
 
 
