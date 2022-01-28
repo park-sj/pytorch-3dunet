@@ -60,8 +60,7 @@ class DicomDataset(ConfigDataset):
                                                  mean=0, std=0)
         self.raw_transform = transformer.raw_transform()
         if self.phase != 'test':
-            self.masks_transform = transformer.label_transform()
-        self.cur_image = np.expand_dims(self.cur_image, 0)        
+            self.masks_transform = transformer.label_transform()       
         if self.phase != 'test':
             self.cur_mask = load_dicom_series(os.path.join(self.file_path, self.phase + '_masks', self.patients[count]))
         else:
