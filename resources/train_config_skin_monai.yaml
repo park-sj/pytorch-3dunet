@@ -67,9 +67,6 @@ lr_scheduler:
   gamma: 0.5
 # data loaders configuration
 loaders:
-  # class of the HDF5 dataset, currently StandardHDF5Dataset and LazyHDF5Dataset are supported.
-  # When using LazyHDF5Dataset make sure to set `num_workers = 1`, due to a bug in h5py which corrupts the data
-  # when reading from multiple threads.
   dataset: DicomDataset
   # batch dimension; if number of GPUs is N > 1, then a batch_size of N * batch_size will automatically be taken for DataParallel
   batch_size: 1
@@ -92,21 +89,49 @@ loaders:
       # SliceBuilder class
       name: SliceBuilder
       # train patch size given to the network (adapt to fit in your GPU mem, generally the bigger patch the better)
-      patch_shape: [128, 128, 128]
-      stride_shape: [120, 120, 120] # [120, 96] or [240, 180]
+      patch_shape: [296, 296, 296]
+      stride_shape: [120, 120, 120]
     # data transformations/augmentations
     transformer:
       raw:
-        # re-scale the values to be 0-mean and 1-std
-        - name: Standardize
+        # crop some axial slices for robust training
+        - name: AxialCrop
+          lower_end: 100
+          upper_end: -100
+          # execute only when the number of slices exceeds the criterion
+          criterion: 600
+        # min-max scaling, range of the data shrinks to [-1,1]
+        - name: Normalize
+          min_value: -750
+          max_value: 1250
+        # random flip for data augmentation (얼굴 좌우로만 함)
+        - name: RandomFlip
+          axes: [2]
+        # resize by scikit-image library
+        - name: Resize
+          shape: [296, 296, 296]
+        # additive Gaussian noise
+        - name: AdditiveGaussianNoise
+          execution_probability: 1.0
         # convert to torch tensor
         - name: ToTensor
           # add additional 'channel' axis when the input data is 3D
           expand_dims: true
       label:
+        # crop some axial slices for robust training
+        - name: AxialCrop
+          lower_end: 100
+          upper_end: -100
+          # execute only when the number of slices exceeds the criterion
+          criterion: 600
+        # random flip for data augmentation (얼굴 좌우로만 함)
+        - name: RandomFlip
+          axes: [2]
+        # resize by scikit-image library
+        - name: Resize
+          shape: [296, 296, 296]
         - name: ToTensor
           expand_dims: true
-
   # configuration of the validation loaders
   val:
     # paths to the validation datasets
@@ -118,13 +143,34 @@ loaders:
       # SliceBuilder class
       name: SliceBuilder
       # train patch size given to the network (adapt to fit in your GPU mem, generally the bigger patch the better)
-      patch_shape: [128, 128, 128]
-      stride_shape: [120, 120, 120] # [120, 96] or [240, 180]
+      patch_shape: [296, 296, 296]
+      stride_shape: [120, 120, 120]
     transformer:
       raw:
-        - name: Standardize
+        # crop some axial slices for robust training
+        - name: AxialCrop
+          lower_end: 100
+          upper_end: -100
+          # execute only when the number of slices exceeds the criterion
+          criterion: 600
+        # min-max scaling, range of the data shrinks to [-1,1]
+        - name: Normalize
+          min_value: -750
+          max_value: 1250
+        # resize by scikit-image library
+        - name: Resize
+          shape: [296, 296, 296]
+        # convert to torch tensor
         - name: ToTensor
+          # add additional 'channel' axis when the input data is 3D
           expand_dims: true
       label:
+        # crop some axial slices for robust training
+        - name: AxialCrop
+          lower_end: 100
+          upper_end: -100
+        # resize by scikit-image library
+        - name: Resize
+          shape: [296, 296, 296]
         - name: ToTensor
           expand_dims: true

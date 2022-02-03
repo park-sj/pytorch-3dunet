@@ -58,9 +58,14 @@ loaders:
       stride_shape: [120, 120, 120] # [120, 96] or [240, 180]
     transformer:
       raw:
-        - name: Standardize
+        # min-max scaling, range of the data shrinks to [-1,1]
+        - name: Normalize
+          min_value: -750
+          max_value: 1250
+        # resize by scikit-image library
+        - name: Resize
+          shape: [128, 128, 128]
+        # convert to torch tensor
         - name: ToTensor
-          expand_dims: true
-      label:
-        - name: ToTensor
+          # add additional 'channel' axis when the input data is 3D
           expand_dims: true

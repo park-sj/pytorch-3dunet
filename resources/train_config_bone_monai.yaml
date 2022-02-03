@@ -67,9 +67,6 @@ lr_scheduler:
   gamma: 0.8
 # data loaders configuration
 loaders:
-  # class of the HDF5 dataset, currently StandardHDF5Dataset and LazyHDF5Dataset are supported.
-  # When using LazyHDF5Dataset make sure to set `num_workers = 1`, due to a bug in h5py which corrupts the data
-  # when reading from multiple threads.
   dataset: NpzDataset
   # batch dimension; if number of GPUs is N > 1, then a batch_size of N * batch_size will automatically be taken for DataParallel
   batch_size: 4
@@ -96,20 +93,25 @@ loaders:
     # data transformations/augmentations
     transformer:
       raw:
-        # re-scale the values to be 0-mean and 1-std
-        - name: Standardize
+        # min-max scaling, range of the data shrinks to [-1,1]
+        - name: Normalize
+          min_value: -500
+          max_value: 2000
+        # resize by scikit-image library
+        - name: Resize
+          shape: [128, 128, 128]
         # convert to torch tensor
         - name: ToTensor
           # add additional 'channel' axis when the input data is 3D
           expand_dims: true
       label:
+        # resize by scikit-image library
+        - name: Resize
+          shape: [128, 128, 128]
         - name: ToTensor
           expand_dims: true
-
   # configuration of the validation loaders
   val:
-    # paths to the validation datasets; if a given path is a directory all H5 files ('*.h5', '*.hdf', '*.hdf5', '*.hd5')
-    # inside this this directory will be included as well (non-recursively)
     file_paths:
       - '/media/shkim/7cf97277-d9cd-454f-994f-59734f6775d0/seg_data/bone/'
     slice_builder:
@@ -120,9 +122,18 @@ loaders:
       stride_shape: [120, 120, 120] # [120, 96] or [240, 180]
     transformer:
       raw:
-        - name: Standardize
+        # min-max scaling, range of the data shrinks to [-1,1]
+        - name: Normalize
+          min_value: -500
+          max_value: 2000
+        # resize by scikit-image library
+        - name: Resize
+          shape: [128, 128, 128]
         - name: ToTensor
           expand_dims: true
       label:
+        # resize by scikit-image library
+        - name: Resize
+          shape: [128, 128, 128]
         - name: ToTensor
           expand_dims: true

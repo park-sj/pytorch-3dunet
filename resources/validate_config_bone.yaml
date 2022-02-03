@@ -98,11 +98,17 @@ loaders:
         - name: Normalize
           min_value: -500
           max_value: 2000
+        # resize by scikit-image library
+        - name: Resize
+          shape: [128, 128, 128]
         # convert to torch tensor
         - name: ToTensor
           # add additional 'channel' axis when the input data is 3D
           expand_dims: true
       label:
+        # resize by scikit-image library
+        - name: Resize
+          shape: [128, 128, 128]
         - name: ToTensor
           expand_dims: true
   # configuration of the validation loaders
@@ -121,8 +127,14 @@ loaders:
         - name: Normalize
           min_value: -500
           max_value: 2000
+        # resize by scikit-image library
+        - name: Resize
+          shape: [128, 128, 128]
         - name: ToTensor
           expand_dims: true
       label:
+        # resize by scikit-image library
+        - name: Resize
+          shape: [128, 128, 128]
         - name: ToTensor
           expand_dims: true
