@@ -32,7 +32,7 @@ class PatchwiseDcmDataset(ConfigDataset):
         :param mirror_padding (int or tuple): number of voxels padded to each axis
         """
         assert os.path.isdir(file_path), 'Incorrect dataset directory'
-        assert phase in ['test'], 'Use SkinNpzDataset for training and validating'
+        assert phase in ['test'], 'Use NpzDataset for training and validating'
         
 
         if mirror_padding is not None:
@@ -57,8 +57,8 @@ class PatchwiseDcmDataset(ConfigDataset):
         if count >= len(self.patients):
             raise StopIteration
         if self.phase == 'test':
-            logger.info(f'Loading dcm files from {os.path.join(self.file_path, self.phase, self.patients[count])}')
-        self.cur_image = load_dicom_series(os.path.join(self.file_path, self.phase, self.patients[count]))
+            logger.info(f'Loading dcm files from {os.path.join(self.file_path, self.patients[count])}')
+        self.cur_image = load_dicom_series(os.path.join(self.file_path, self.patients[count]))
 
         ''' padding '''
         patch_shape = self.slice_builder_config['patch_shape']

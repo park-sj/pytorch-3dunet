@@ -48,7 +48,7 @@ class NpzDataset(ConfigDataset):
         self.slice_builder_config = slice_builder_config
         self.phase = phase
         self.file_path = file_path
-        self.patients = os.listdir(os.path.join(file_path, phase))
+        self.patients = os.listdir(file_path)
         self.transformer_config = transformer_config
         
         self.patch_per_image = 1
@@ -57,8 +57,8 @@ class NpzDataset(ConfigDataset):
         if count >= len(self.patients):
             raise StopIteration
         if self.phase == 'test':
-            logger.info(f'Loading dcm files from {os.path.join(self.file_path, self.phase, self.patients[count])}')
-        data = np.load(os.path.join(self.file_path, self.phase, self.patients[count]))
+            logger.info(f'Loading dcm files from {os.path.join(self.file_path, self.patients[count])}')
+        data = np.load(os.path.join(self.file_path, self.patients[count]))
         
         self.cur_image = data['ct']
         

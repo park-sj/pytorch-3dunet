@@ -59,12 +59,6 @@ loaders:
       stride_shape: [120, 120, 120] # [120, 96] or [240, 180]
     transformer:
       raw:
-        # crop some axial slices for robust training
-        - name: AxialCrop
-          lower_end: 100
-          upper_end: -100
-          # execute only when the number of slices exceeds the criterion
-          criterion: 600
         # min-max scaling, range of the data shrinks to [-1,1]
         - name: Normalize
           min_value: -750
@@ -75,14 +69,4 @@ loaders:
         # convert to torch tensor
         - name: ToTensor
           # add additional 'channel' axis when the input data is 3D
-          expand_dims: true
-      label:
-        # crop some axial slices for robust training
-        - name: AxialCrop
-          lower_end: 100
-          upper_end: -100
-        # resize by scikit-image library
-        - name: Resize
-          shape: [296, 296, 296]
-        - name: ToTensor
           expand_dims: true

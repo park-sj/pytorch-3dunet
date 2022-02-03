@@ -19,7 +19,7 @@ from pytorch3dunet.unet3d.utils import get_logger
 logger = get_logger('DicomDataset')
 
 class DicomDataset(ConfigDataset):
-    def __init__(self, file_path, phase, slice_builder_config, transformer_config, mirror_padding=(0, 32, 32)):
+    def __init__(self, file_path, mask_path, phase, slice_builder_config, transformer_config, mirror_padding=(0, 32, 32)):
         """
         :param file_path: path to dicom root directory
         :param phase: 'train' for training, 'val' for validation, 'test' for testing; data augmentation is performed
@@ -32,7 +32,7 @@ class DicomDataset(ConfigDataset):
         
         if phase in ['train', 'val']:
             mirror_padding = None
-
+            
         if mirror_padding is not None:
             if isinstance(mirror_padding, int):
                 mirror_padding = (mirror_padding,) * 3
@@ -43,7 +43,8 @@ class DicomDataset(ConfigDataset):
         self.slice_builder_config = slice_builder_config
         self.phase = phase
         self.file_path = file_path
-        self.patients = os.listdir(os.path.join(file_path, phase))
+        self.mask_path = mask_path
+        self.patients = os.listdir(file_path)
         self.transformer_config = transformer_config
         
         self.patch_per_image = 1
@@ -52,8 +53,8 @@ class DicomDataset(ConfigDataset):
         if count >= len(self.patients):
             raise StopIteration
         if self.phase == 'test':
-            logger.info(f'Loading dcm files from {os.path.join(self.file_path, self.phase, self.patients[count])}')
-        self.cur_image = load_dicom_series(os.path.join(self.file_path, self.phase, self.patients[count]))
+            logger.info(f'Loading dcm files from {os.path.join(self.file_path, self.patients[count])}')
+        self.cur_image = load_dicom_series(os.path.join(self.file_path, self.patients[count]))
         
         # stats are dummy value
         transformer = transforms.get_transformer(self.transformer_config, min_value=0, max_value=0,
@@ -62,7 +63,7 @@ class DicomDataset(ConfigDataset):
         if self.phase != 'test':
             self.masks_transform = transformer.label_transform()       
         if self.phase != 'test':
-            self.cur_mask = load_dicom_series(os.path.join(self.file_path, self.phase + '_masks', self.patients[count]))
+            self.cur_mask = load_dicom_series(os.path.join(self.mask_path, self.patients[count]))
         else:
             self.cur_mask = None
         
@@ -104,10 +105,14 @@ class DicomDataset(ConfigDataset):
         slice_builder_config = phase_config['slice_builder']
         # load files to process
         file_paths = phase_config['file_paths']
+        # load masks to process
+        mask_paths = phase_config.get('mask_paths', None)
+        if mask_paths is not None:
+            mask_paths = mask_paths[0]
         # mirror padding conf
         mirror_padding = dataset_config.get('mirror_padding', None)
 
-        return [cls(file_paths[0], phase, slice_builder_config, transformer_config, mirror_padding)]
+        return [cls(file_paths[0], mask_paths, phase, slice_builder_config, transformer_config, mirror_padding)]
 
 
 def load_dicom_series(dir):

@@ -47,8 +47,8 @@ class _AbstractDicomPredictor(_AbstractPredictor):
     Dicom 파일로 출력을 저장하는 predictor를 위한 abstract predictor
     
     '''
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
+    def __init__(self, model, loader, output_file, config, **kwargs):
+        super().__init__(model, loader, output_file, config, **kwargs)
         
     @staticmethod
     def _save_dicom(newArray, transform, filepath, template_path):
