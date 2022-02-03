@@ -53,7 +53,7 @@ loaders:
     slice_builder:
       # SliceBuilder class
       name: SliceBuilder
-      # train patch size given to the network (adapt to fit in your GPU mem, generally the bigger patch the better)
+      # ABPredictor use patch_shape to resize cropped input
       patch_shape: [128, 128, 128]
       stride_shape: [120, 120, 120] # [120, 96] or [240, 180]
     transformer:
@@ -62,8 +62,5 @@ loaders:
         - name: Normalize
           min_value: -500
           max_value: 2000
-        # resize by scikit-image library
-        - name: Resize
-          shape: [128, 128, 128]
         - name: ToTensor
           expand_dims: true

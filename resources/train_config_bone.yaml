@@ -85,7 +85,7 @@ loaders:
     # absolute paths to the training datasets; if a given path is a directory all H5 files ('*.h5', '*.hdf', '*.hdf5', '*.hd5')
     # inside this this directory will be included as well (non-recursively)
     file_paths:
-      - '/media/shkim/7cf97277-d9cd-454f-994f-59734f6775d0/seg_data/bone/'
+      - '/media/shkim/7cf97277-d9cd-454f-994f-59734f6775d0/seg_data/bone/train/'
     slice_builder:
       # SliceBuilder class
       name: SliceBuilder
@@ -115,7 +115,7 @@ loaders:
   # configuration of the validation loaders
   val:
     file_paths:
-      - '/media/shkim/7cf97277-d9cd-454f-994f-59734f6775d0/seg_data/bone/'
+      - '/media/shkim/7cf97277-d9cd-454f-994f-59734f6775d0/seg_data/bone/val/'
     slice_builder:
       # SliceBuilder class
       name: SliceBuilder

@@ -29,10 +29,6 @@ predictor:
         threshold: 0.5
 # specify the test datasets
 loaders:
-  output_dir: '/home/shkim/Libraries/pytorch-3dunet/datasets/bone/save/'
-  # class of the HDF5 dataset, currently StandardHDF5Dataset and LazyHDF5Dataset are supported.
-  # When using LazyHDF5Dataset make sure to set `num_workers = 1`, due to a bug in h5py which corrupts the data
-  # when reading from multiple threads.
   dataset: ABDataset
   # batch dimension; if number of GPUs is N > 1, then a batch_size of N * batch_size will automatically be taken for DataParallel
   batch_size: 1
@@ -46,14 +42,16 @@ loaders:
   weight_internal_path: null
   # configuration of the test loader
   test:
-    # paths to the validation datasets; if a given path is a directory all H5 files ('*.h5', '*.hdf', '*.hdf5', '*.hd5')
-    # inside this this directory will be included as well (non-recursively)
+    # paths to the files to predict
     file_paths:
-      - '/home/shkim/Libraries/pytorch-3dunet/datasets/bone/'
+      - 'io/test'
+    # The path where the result is saved to
+    save_paths: 
+      - 'io/save'
     slice_builder:
       # SliceBuilder class
       name: SliceBuilder
-      # train patch size given to the network (adapt to fit in your GPU mem, generally the bigger patch the better)
+      # ABPredictor use patch_shape to resize cropped input
       patch_shape: [128, 128, 128]
       stride_shape: [120, 120, 120] # [120, 96] or [240, 180]
     transformer:
@@ -62,8 +60,5 @@ loaders:
         - name: Normalize
           min_value: -500
           max_value: 2000
-        # resize by scikit-image library
-        - name: Resize
-          shape: [128, 128, 128]
         - name: ToTensor
           expand_dims: true

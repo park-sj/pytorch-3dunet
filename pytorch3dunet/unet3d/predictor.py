@@ -51,7 +51,7 @@ class _AbstractDicomPredictor(_AbstractPredictor):
         super().__init__(model, loader, output_file, config, **kwargs)
         
     @staticmethod
-    def _save_dicom(newArray, transform, filepath, template_path):
+    def _save_dicom(newArray, transform, filepath, template_path, crop=None):
         def _load_template(dir):
             logger.info("The template DCM directory is " + dir)
             assert os.path.isdir(dir), 'Cannot find the template directory'
@@ -72,11 +72,24 @@ class _AbstractDicomPredictor(_AbstractPredictor):
         
         if len(newArray.shape) > 3:
             newArray = np.squeeze(newArray)
-        newArray = skimage.transform.resize(newArray, imgShape, anti_aliasing=False)
-        newArray = transform(newArray)
-        newArray = newArray.astype(np.int8)
-        
-        newImage = sitk.GetImageFromArray(newArray)
+            
+        if crop is not None:
+            '''
+            Execute this code when the child class is ABPredictor
+            because prediction is not the whole image
+            but a cropped image. We have to restore it before saving.
+            '''
+            newArray = skimage.transform.resize(newArray, ((crop[1]-crop[0]),(crop[3]-crop[2]), (crop[5]-crop[4])), anti_aliasing=False)
+            newArray = transform(newArray)
+            newArray = newArray.astype(np.int8)
+            paddedArray = np.zeros(imgShape, dtype=np.int16)
+            paddedArray[crop[0]:crop[1],crop[2]:crop[3],crop[4]:crop[5]] = newArray
+            newImage = sitk.GetImageFromArray(paddedArray)
+        else:
+            newArray = skimage.transform.resize(newArray, imgShape, anti_aliasing=False)
+            newArray = transform(newArray)
+            newArray = newArray.astype(np.int8)
+            newImage = sitk.GetImageFromArray(newArray)
         newImage = sitk.Cast(newImage, sitk.sitkInt8)
         # newImage.CopyInformation(oldImage)
         writer = sitk.ImageFileWriter()
@@ -525,6 +538,5 @@ class ABPredictor(_AbstractDicomPredictor):
                 patient = os.listdir(self.file_paths)[0]
                 self._save_dicom(prediction,
                                  raw_transform,
-                                 os.path.join(self.file_paths, patient),
-                                 os.path.join(self.save_paths, patient), crop)
-
+                                 os.path.join(self.save_paths, patient),
+                                 os.path.join(self.file_paths, patient), crop)
