@@ -481,6 +481,12 @@ class ABPredictor(_AbstractDicomPredictor):
             logger.info(f"Using only channel '{prediction_channel}' from the network output")
 
         device = self.config['device']
+        
+        # stats are dummy values
+        logger.info(f"Loading postprocessing... Configs {self.config['predictor']['transformer']}")
+        transform = transforms.get_transformer(self.config['predictor']['transformer'], min_value=0, max_value=0,
+                                                 mean=0, std=0)
+        raw_transform = transform.raw_transform()
 
         logger.info(f'Running prediction on {len(self.loader)} batches...')
 
@@ -518,6 +524,7 @@ class ABPredictor(_AbstractDicomPredictor):
                 # save results to
                 patient = os.listdir(self.file_paths)[0]
                 self._save_dicom(prediction,
+                                 raw_transform,
                                  os.path.join(self.file_paths, patient),
                                  os.path.join(self.save_paths, patient), crop)
 

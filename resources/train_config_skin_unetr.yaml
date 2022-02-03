@@ -80,7 +80,7 @@ loaders:
   train:
     # absolute paths to the training datasets
     file_paths:
-      - '/media/shkim/7cf97277-d9cd-454f-994f-59734f6775d0/skin_data/'
+      - '/media/shkim/7cf97277-d9cd-454f-994f-59734f6775d0/seg_data/skin/'
     slice_builder:
       # SliceBuilder class
       name: SliceBuilder
@@ -133,7 +133,7 @@ loaders:
   val:
     # paths to the validation datasets
     file_paths:
-      - '/media/shkim/7cf97277-d9cd-454f-994f-59734f6775d0/skin_data/'
+      - '/media/shkim/7cf97277-d9cd-454f-994f-59734f6775d0/seg_data/skin/'
     slice_builder:
       # SliceBuilder class
       name: SliceBuilder

@@ -16,6 +16,11 @@ model:
 # predictor configuration
 predictor:
   name: 'StandardPredictor'
+  # Thresholding output to make it 0, 1 binary
+  transformer:
+    raw:
+      - name: Thresholding
+        threshold: 0.5
 # specify the test datasets
 loaders:
   # when reading from multiple threads.

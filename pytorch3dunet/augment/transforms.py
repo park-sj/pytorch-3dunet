@@ -647,6 +647,28 @@ class Resize:
     def __call__(self, m):
         m = resize(m, self.shape, anti_aliasing = False)
         return m
+    
+    
+class Thresholding:
+    """
+    Thresholds the input array, then returns a binary array
+    """
+
+    def __init__(self, threshold=0.5, **kwargs):
+        self.threshold = threshold
+
+    def __call__(self, m):
+        m[m>self.threshold] = 1
+        m[m<=self.threshold] = 0
+        return m
+
+
+class AsType:
+    def __init__(self, target_type, **kwargs):
+        self.target_type = target_type
+
+    def __call__(self, m):
+        return m.astype(self.target_type)
 
 
 class ToTensor:

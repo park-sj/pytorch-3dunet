@@ -22,6 +22,11 @@ model:
 # predictor configuration
 predictor:
   name: 'ABPredictor'
+  # Thresholding output to make it 0, 1 binary
+  transformer:
+    raw:
+      - name: Thresholding
+        threshold: 0.5
 # specify the test datasets
 loaders:
   output_dir: '/home/shkim/Libraries/pytorch-3dunet/datasets/bone/save/'
