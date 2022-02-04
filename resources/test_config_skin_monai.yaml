@@ -43,13 +43,12 @@ loaders:
   weight_internal_path: null
   # configuration of the test loader
   test:
-    # paths to the validation datasets; if a given path is a directory all H5 files ('*.h5', '*.hdf', '*.hdf5', '*.hd5')
-    # inside this this directory will be included as well (non-recursively)
+    # paths to the files to predict
     file_paths:
-      - 'io/'
-    # The result is saved to 'save_paths/save'
+      - 'io/test'
+    # The path where the result is saved to
     save_paths: 
-      - 'io/'
+      - 'io/save'
     slice_builder:
       # SliceBuilder class
       name: SliceBuilder

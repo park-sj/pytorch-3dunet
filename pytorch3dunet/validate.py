@@ -130,8 +130,6 @@ def main():
     
     # Create loss criterion
     loss_criterion = get_loss_criterion(config)
-
-    
         
     # Create evaluation metric
     eval_criterion = get_evaluation_metric(config)

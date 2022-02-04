@@ -127,9 +127,13 @@ loaders:
         # random flip for data augmentation (얼굴 좌우로만 함)
         - name: RandomFlip
           axes: [2]
+        - name: AsType
+          target_type: float32
         # resize by scikit-image library
         - name: Resize
           shape: [296, 296, 296]
+        - name: AsType
+          target_type: int16
         - name: ToTensor
           expand_dims: true
   # configuration of the validation loaders
@@ -169,8 +173,12 @@ loaders:
         - name: AxialCrop
           lower_end: 100
           upper_end: -100
+        - name: AsType
+          target_type: float32
         # resize by scikit-image library
         - name: Resize
           shape: [296, 296, 296]
+        - name: AsType
+          target_type: int16
         - name: ToTensor
           expand_dims: true

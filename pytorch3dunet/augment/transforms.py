@@ -664,8 +664,11 @@ class Thresholding:
 
 
 class AsType:
+    """
+    Converts type of the input array. Supports only the numpy types.
+    """
     def __init__(self, target_type, **kwargs):
-        self.target_type = target_type
+        self.target_type = getattr(np, target_type)
 
     def __call__(self, m):
         return m.astype(self.target_type)

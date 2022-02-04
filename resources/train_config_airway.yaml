@@ -85,7 +85,7 @@ loaders:
     # absolute paths to the training datasets; if a given path is a directory all H5 files ('*.h5', '*.hdf', '*.hdf5', '*.hd5')
     # inside this this directory will be included as well (non-recursively)
     file_paths:
-      - '/home/shkim/Libraries/pytorch-3dunet/datasets/airway/'
+      - '/media/shkim/7cf97277-d9cd-454f-994f-59734f6775d0/seg_data/airway/train/'
     slice_builder:
       # SliceBuilder class
       name: SliceBuilder
@@ -107,15 +107,19 @@ loaders:
           # add additional 'channel' axis when the input data is 3D
           expand_dims: true
       label:
+        - name: AsType
+          target_type: float32
         # resize by scikit-image library
         - name: Resize
           shape: [128, 128, 128]
+        - name: AsType
+          target_type: int16
         - name: ToTensor
           expand_dims: true
   # configuration of the validation loaders
   val:
     file_paths:
-      - '/home/shkim/Libraries/pytorch-3dunet/datasets/airway/'
+      - '/media/shkim/7cf97277-d9cd-454f-994f-59734f6775d0/seg_data/airway/val/'
     slice_builder:
       # SliceBuilder class
       name: SliceBuilder
@@ -134,8 +138,12 @@ loaders:
         - name: ToTensor
           expand_dims: true
       label:
+        - name: AsType
+          target_type: float32
         # resize by scikit-image library
         - name: Resize
           shape: [128, 128, 128]
+        - name: AsType
+          target_type: int16
         - name: ToTensor
           expand_dims: true
