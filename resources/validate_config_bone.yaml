@@ -73,12 +73,6 @@ loaders:
   batch_size: 4
   # how many subprocesses to use for data loading
   num_workers: 4
-  # path to the raw data within the H5
-  raw_internal_path: raw
-  # path to the the label data withtin the H5
-  label_internal_path: label
-  # path to the pixel-wise weight map withing the H5 if present
-  weight_internal_path: null
   # configuration of the train loader
   train:
     # absolute paths to the training datasets; if a given path is a directory all H5 files ('*.h5', '*.hdf', '*.hdf5', '*.hd5')
