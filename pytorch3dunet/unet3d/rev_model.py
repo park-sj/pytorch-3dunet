@@ -92,12 +92,12 @@ class DecoderModule(nn.Module):
         return x
 
 class NoNewReversible(nn.Module):
-    def __init__(self, in_channels, out_channels, final_sigmoid=True, f_maps=64, channels = [32, 64, 128, 256, 512], layer_order='gcr',
+    def __init__(self, in_channels, out_channels, final_sigmoid=True, f_maps=64, depth=1,
+                 channels = [32, 64, 128, 256, 512], layer_order='gcr',
                  num_groups=8, num_levels=5, is_segmentation=True, conv_padding=1, **kwargs):
         super(NoNewReversible, self).__init__()
         global CHANNELS
         CHANNELS = channels
-        depth = 1
         self.levels = num_levels
         self.final_sigmoid = final_sigmoid
 
