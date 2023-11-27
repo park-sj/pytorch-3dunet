@@ -8,6 +8,7 @@ from pytorch3dunet.unet3d.scheduler import CosineAnnealingWarmUpRestarts
 
 from pytorch3dunet.unet3d.utils import get_logger
 from . import utils
+from . import losses
 
 logger = get_logger('UNet3DTrainer')
 
@@ -165,6 +166,8 @@ class UNet3DTrainer:
         """
         train_losses = utils.RunningAverage()
         train_eval_scores = utils.RunningAverage()
+        
+        #CustomActiveContourLoss = losses.CustomActiveContourLoss()
 
         # sets the model in training mode
         self.model.train()
@@ -174,8 +177,8 @@ class UNet3DTrainer:
                 f'Training iteration {self.num_iterations}. Batch {i}. Epoch [{self.num_epoch}/{self.max_num_epochs - 1}]')
 
             input, target, name = self._split_training_batch(t)
-
             output, loss = self._forward_pass(input, target)
+            
             logger.info(
                 f'{name} - {loss}')
             train_losses.update(loss.item(), self._batch_size(input))
@@ -213,6 +216,7 @@ class UNet3DTrainer:
             if self.num_iterations % self.log_after_iters == 0:
                 # if model contains final_activation layer for normalizing logits apply it, otherwise both
                 # the evaluation metric as well as images in tensorboard will be incorrectly computed
+                
                 if hasattr(self.model, 'final_activation') and self.model.final_activation is not None:
                     output = self.model.final_activation(output)
 
@@ -221,10 +225,14 @@ class UNet3DTrainer:
                     eval_score = self.eval_criterion(output, target)
                     train_eval_scores.update(eval_score.item(), self._batch_size(input))
 
+                #origin = utils.convert_xy_to_ab(-1, 1, -500, 2000, input)
+                #intensity_in, intensity_out = CustomActiveContourLoss.forward(output, origin)
+
                 # log stats, params and images
                 logger.info(
                     f'Training stats. Loss: {train_losses.avg}. Evaluation score: {train_eval_scores.avg}')
                 self._log_stats('train', train_losses.avg, train_eval_scores.avg)
+                #self._log_custom_stats('train', intensity_in, intensity_out)
                 self._log_params()
                 self._log_images(input, target, output, 'train_')
 
@@ -257,14 +265,14 @@ class UNet3DTrainer:
         val_losses = utils.RunningAverage()
         val_scores = utils.RunningAverage()
         
+        #CustomActiveContourLoss = losses.CustomActiveContourLoss()        
         
         with torch.no_grad():
             for i, t in enumerate(val_loader):
                 logger.info(f'Validation iteration {i}')
                 input, target, name = self._split_training_batch(t)
 
-                output, loss = self._forward_pass(input, target)
-
+                output, loss = self._forward_pass(input, target)              
                 val_losses.update(loss.item(), self._batch_size(input))
 
                 # if model contains final_activation layer for normalizing logits apply it, otherwise
@@ -283,6 +291,10 @@ class UNet3DTrainer:
                 if self.validate_iters is not None and self.validate_iters <= i:
                     # stop validation
                     break
+
+            #origin = utils.convert_xy_to_ab(-1, 1, -500, 2000, input)
+            #intensity_in, intensity_out = CustomActiveContourLoss.forward(output, origin)
+            #self._log_custom_stats('val', intensity_in, intensity_out)  
 
             self._log_stats('val', val_losses.avg, val_scores.avg)
             logger.info(f'Validation finished. Loss: {val_losses.avg}. Evaluation score: {val_scores.avg}')
@@ -364,7 +376,16 @@ class UNet3DTrainer:
     def _log_stats(self, phase, loss_avg, eval_score_avg):
         tag_value = {
             f'{phase}_loss_avg': loss_avg,
-            f'{phase}_eval_score_avg': eval_score_avg
+            f'{phase}_eval_score_avg': eval_score_avg,
+        }
+
+        for tag, value in tag_value.items():
+            self.writer.add_scalar(tag, value, self.num_iterations)
+
+    def _log_custom_stats(self, phase, intensity_in, intensity_out):
+        tag_value = {
+            f'{phase}_intensity_in_avg': intensity_in,
+            f'{phase}_intensity_out_avg': intensity_out
         }
 
         for tag, value in tag_value.items():

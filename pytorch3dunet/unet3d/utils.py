@@ -108,7 +108,6 @@ def get_logger(name, level=logging.INFO):
 
         return logger
 
-
 def get_number_of_learnable_parameters(model):
     model_parameters = filter(lambda p: p.requires_grad, model.parameters())
     return sum([np.prod(p.size()) for p in model_parameters])
@@ -431,3 +430,22 @@ def convert_to_numpy(input, target):
     target = target.detach().cpu().numpy()  # 5D
 
     return input, target
+    
+    
+def convert_xy_to_ab(x, y, a, b, input):
+    """
+    Convert [x,y] range values to [a,b] values
+    
+    Args:
+        x, y, a, b : integer range values
+        input : 5D torch tensor [b, c, w, h, d]
+    
+    Return:
+        5D torch tensor [b, c, w, h, d]
+    """
+    
+    output_ab = ((input-x)/(y-x)) * (b-a) + a
+    
+    return output_ab
+    
+    

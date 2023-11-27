@@ -1,0 +1,186 @@
+# use a fixed random seed to guarantee that when you run the code twice you will get the same outcome
+# manual_seed: 0
+# model configuration
+model:
+  # model class, e.g. UNet3D, ResidualUNet3D, NoNewReversible
+  name: NoNewReversible
+  # number of input channels to the model
+  in_channels: 1
+  # number of output channels
+  out_channels: 1
+  # determines the order of operators in a single layer (gcr - GroupNorm+Conv3d+ReLU)
+  layer_order: gcr
+  # feature maps scale factor
+  f_maps: 4
+  # number of channels in each layer (num_levels를 넘는 index의 element는 무시될 것임) 
+  channels: [16, 32, 64, 128, 256]
+  # depth of convolution layer
+  depth: 1
+  # number of groups in the groupnorm
+  num_groups: 4
+  # number of levels in the encoder/decoder path
+  num_levels: 4
+  # apply element-wise nn.Sigmoid after the final 1x1 convolution, otherwise apply nn.Softmax
+  final_sigmoid: true
+  # if True applies the final normalization layer (sigmoid or softmax), otherwise the networks returns the output from the final convolution layer; use False for regression problems, e.g. de-noising
+  is_segmentation: true
+# trainer configuration
+trainer:
+  # path to the checkpoint directory
+  checkpoint_dir: 3dunet
+  # path to latest checkpoint; if provided the training will be resumed from that checkpoint
+  resume: Null
+  # how many iterations between validations
+  validate_after_iters: 50
+  # how many iterations between tensorboard logging
+  log_after_iters: 50
+  # how many iterations between gradient accumulation (default = 1 which means don't accumulate gradients)
+  accumulation_iters: 1
+  # max number of epochs
+  epochs: 30
+  # max number of iterations
+  iters: 1000000
+  # model with higher eval score is considered better
+  eval_score_higher_is_better: True
+# optimizer configuration
+optimizer:
+  # initial learning rate
+  learning_rate: 0.000002
+  # weight decay
+  weight_decay: 0.0001
+# loss function configuration
+loss:
+  # loss function to be used during training
+  name: DiceLoss
+  # A manual rescaling weight given to each class.
+  weight: null
+  lambdaP: 50.0
+  # a target value that is ignored and does not contribute to the input gradient
+  ignore_index: null
+# evaluation metric configuration
+eval_metric:
+  # use AdaptedRandError metric
+  name: MeanIoU
+  # probability maps thresholds to validate on
+  thresholds: [0.5]
+  # use the last target channel to compute the metric
+  use_last_target: true
+  # use only the first channel for computing the metric
+  input_channel: 0
+lr_scheduler:
+  name: CosineAnnealingWarmUpRestarts
+  T_0: 400
+  eta_max: 0.001
+  T_up: 50
+  gamma: 0.5
+# data loaders configuration
+loaders:
+  dataset: DicomDataset
+  # batch dimension; if number of GPUs is N > 1, then a batch_size of N * batch_size will automatically be taken for DataParallel
+  batch_size: 1
+  # how many subprocesses to use for data loading
+  num_workers: 0
+  # configuration of the train loader
+  train:
+    # absolute paths to the training datasets
+    file_paths:
+      - '/media/shkim/7cf97277-d9cd-454f-994f-59734f6775d0/GNG_extraction/train/'
+    mask_paths:
+      - '/media/shkim/7cf97277-d9cd-454f-994f-59734f6775d0/GNG_extraction/train_masks/'
+    slice_builder:
+      # SliceBuilder class
+      name: SliceBuilder
+      # train patch size given to the network (adapt to fit in your GPU mem, generally the bigger patch the better)
+      patch_shape: [296, 296, 296]
+      stride_shape: [120, 120, 120]
+    # data transformations/augmentations
+    transformer:
+      raw:
+        # crop some axial slices for robust training
+        - name: AxialCrop
+          lower_end: 100
+          upper_end: -100
+          # execute only when the number of slices exceeds the criterion
+          criterion: 600
+        # min-max scaling, range of the data shrinks to [-1,1]
+        - name: Normalize
+          min_value: -500
+          max_value: 2000
+        # random flip for data augmentation (얼굴 좌우로만 함)
+        - name: RandomFlip
+          axes: [2]
+        # resize by scikit-image library
+        - name: Resize
+          shape: [296, 296, 296]
+        # additive Gaussian noise
+        - name: AdditiveGaussianNoise
+          execution_probability: 1.0
+        # convert to torch tensor
+        - name: ToTensor
+          # add additional 'channel' axis when the input data is 3D
+          expand_dims: true
+      label:
+        # crop some axial slices for robust training
+        - name: AxialCrop
+          lower_end: 100
+          upper_end: -100
+          # execute only when the number of slices exceeds the criterion
+          criterion: 600
+        # random flip for data augmentation (얼굴 좌우로만 함)
+        - name: RandomFlip
+          axes: [2]
+        - name: AsType
+          target_type: float32
+        # resize by scikit-image library
+        - name: Resize
+          shape: [296, 296, 296]
+        - name: AsType
+          target_type: int16
+        - name: ToTensor
+          expand_dims: true
+  # configuration of the validation loaders
+  val:
+    # paths to the validation datasets
+    file_paths:
+      - '/media/shkim/7cf97277-d9cd-454f-994f-59734f6775d0/GNG_extraction/val/'
+    mask_paths:
+      - '/media/shkim/7cf97277-d9cd-454f-994f-59734f6775d0/GNG_extraction/val_masks/'
+    slice_builder:
+      # SliceBuilder class
+      name: SliceBuilder
+      # train patch size given to the network (adapt to fit in your GPU mem, generally the bigger patch the better)
+      patch_shape: [296, 296, 296]
+      stride_shape: [120, 120, 120]
+    transformer:
+      raw:
+        # crop some axial slices for robust training
+        - name: AxialCrop
+          lower_end: 100
+          upper_end: -100
+          # execute only when the number of slices exceeds the criterion
+          criterion: 600
+        # min-max scaling, range of the data shrinks to [-1,1]
+        - name: Normalize
+          min_value: -500
+          max_value: 2000
+        # resize by scikit-image library
+        - name: Resize
+          shape: [296, 296, 296]
+        # convert to torch tensor
+        - name: ToTensor
+          # add additional 'channel' axis when the input data is 3D
+          expand_dims: true
+      label:
+        # crop some axial slices for robust training
+        - name: AxialCrop
+          lower_end: 100
+          upper_end: -100
+        - name: AsType
+          target_type: float32
+        # resize by scikit-image library
+        - name: Resize
+          shape: [296, 296, 296]
+        - name: AsType
+          target_type: int16
+        - name: ToTensor
+          expand_dims: true
